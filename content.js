@@ -41,21 +41,33 @@
     setActive(true);
   });
 
-  function findProfileSlot() {
-    let btn = document.querySelector(PROFILE_BTN);
-    if (!btn) {
-      // Non-English UI translates the aria-label; fall back to the menu
-      // button that sits beside the avatar image.
-      btn = [...document.querySelectorAll('nav button[aria-haspopup="menu"], aside button[aria-haspopup="menu"]')]
-        .find((b) => b.parentElement?.querySelector('img.rounded-full'));
-    }
-    if (!btn) return null;
-    let el = btn.parentElement;
+  // Walk up from an element to the nearest ancestor that has the empty slot as a direct child.
+  function slotAbove(el) {
     for (let depth = 0; el && el !== document.body && depth < 8; depth++, el = el.parentElement) {
       const slot = el.querySelector(SLOT);
       if (slot) return { slot, row: el };
     }
     return null;
+  }
+
+  // ChatGPT can render more than one profile button (e.g. a collapsed-sidebar copy), so
+  // try every candidate rather than only the first match.
+  function findProfileSlot() {
+    let buttons = [...document.querySelectorAll(PROFILE_BTN)];
+    if (!buttons.length) {
+      // Non-English UI translates the aria-label; fall back to the menu
+      // button that sits beside the avatar image.
+      buttons = [...document.querySelectorAll('nav button[aria-haspopup="menu"], aside button[aria-haspopup="menu"]')]
+        .filter((b) => b.parentElement?.querySelector('img.rounded-full'));
+    }
+    let hidden = null;
+    for (const btn of buttons) {
+      const found = slotAbove(btn.parentElement);
+      if (!found) continue;
+      if (found.row.getClientRects().length) return found; // prefer the one that is on screen
+      hidden ??= found;
+    }
+    return hidden;
   }
 
   let profileRow = null;
@@ -90,6 +102,12 @@
       ui.classList.remove('cmd-docked');
       ui.classList.add('cmd-floating');
       ui.style.cssText = '';
+      // Small card in the sidebar's bottom-right, so it never covers the name on the left.
+      const nr = rows()[0]?.closest('nav, aside')?.getBoundingClientRect();
+      if (nr && nr.width > 120) {
+        ui.style.left = 'auto';
+        ui.style.right = `${Math.round(innerWidth - nr.right + 12)}px`;
+      }
     }
   }
   addEventListener('resize', () => placeToolbar());
