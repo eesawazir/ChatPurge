@@ -111,3 +111,10 @@ a.cmd-row.cmd-selected .cmd-check::after {
 }
 
 .cmd-gone { display: none !important; }
+
+.cmd-status-action {
+  padding: 2px 8px;
+  margin-left: 4px;
+  color: var(--cmd-fg);
+  border: 1px solid var(--cmd-line);
+}

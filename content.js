@@ -45,10 +45,19 @@
     render();
   });
 
-  function status(msg, autoClearMs = 0) {
+  function status(msg, autoClearMs = 0, action = null) {
     clearTimeout(statusTimer);
-    $('.cmd-status').textContent = msg;
-    if (autoClearMs) statusTimer = setTimeout(() => ($('.cmd-status').textContent = ''), autoClearMs);
+    const el = $('.cmd-status');
+    el.textContent = msg;
+    if (action) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cmd-btn cmd-status-action';
+      btn.textContent = action.label;
+      btn.addEventListener('click', action.run);
+      el.append(' ', btn);
+    }
+    if (autoClearMs) statusTimer = setTimeout(() => (el.textContent = ''), autoClearMs);
   }
 
   function setActive(on) {
@@ -101,13 +110,36 @@
     });
   }
 
+  // Walk up from the link to the outermost wrapper that holds only this one chat,
+  // so the whole row (link + menu button + spacing) collapses, not just the link.
+  function rowContainer(a) {
+    let el = a;
+    while (el.parentElement && el.parentElement !== document.body) {
+      const p = el.parentElement;
+      if (p.matches('nav, aside, ol, ul, [role="list"]')) break;
+      if (p.querySelectorAll('a[href*="/c/"]').length !== 1) break;
+      if (p.querySelector('h1, h2, h3, h4, h5, h6')) break; // don't hide section headings
+      el = p;
+    }
+    return el;
+  }
+
+  // Returns true if the row collapsed cleanly, false if a gap is left behind
+  // (e.g. a virtualised list that positions rows with fixed offsets).
   function markGone(id) {
+    let collapsed = true;
     document.querySelectorAll(ROW_SELECTOR).forEach((a) => {
       if (idOf(a) !== id) return;
-      const li = a.closest('li');
-      const target = li && li.querySelectorAll('a[href*="/c/"]').length === 1 ? li : a;
-      target.classList.add('cmd-gone');
+      const list = rows();
+      const next = list[list.indexOf(a) + 1];
+      const before = next?.getBoundingClientRect().top;
+      rowContainer(a).classList.add('cmd-gone');
+      if (next && next.isConnected && before !== undefined) {
+        const after = next.getBoundingClientRect().top;
+        if (Math.abs(after - before) < 1) collapsed = false;
+      }
     });
+    return collapsed;
   }
 
   // In selection mode, clicks on a row toggle it instead of opening the chat.
@@ -211,6 +243,7 @@
     const openId = location.pathname.match(ID_RE)?.[1];
     let deleted = 0;
     let stoppedEarly = null;
+    let gapsLeft = false;
 
     for (let i = 0; i < ids.length; i++) {
       status(`Deleting ${i + 1} of ${ids.length}…`);
@@ -218,7 +251,7 @@
         await hideConversation(ids[i]);
         deleted++;
         state.selected.delete(ids[i]);
-        markGone(ids[i]);
+        if (!markGone(ids[i])) gapsLeft = true;
       } catch (err) {
         console.warn('[ChatPurge]', ids[i], err);
         if (err.fatal) { stoppedEarly = err.message; break; }
@@ -232,6 +265,9 @@
       status(`Deleted ${deleted}. Stopped: ${stoppedEarly}. Reload the page and try again.`);
     } else if (left) {
       status(`Deleted ${deleted}. ${left} couldn't be deleted and are still selected.`);
+    } else if (gapsLeft) {
+      status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}. Refresh to tidy the sidebar.`, 0,
+        { label: 'Refresh', run: () => location.reload() });
     } else {
       status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}.`, 6000);
     }
