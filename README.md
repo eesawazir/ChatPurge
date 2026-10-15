@@ -49,15 +49,15 @@ Deleting ChatGPT chats one at a time is slow. ChatPurge adds checkboxes to the s
 
 1. Press <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd>, or click the ChatPurge icon in the Chrome toolbar.
 2. Click the chats you want gone. Hold <kbd>Shift</kbd> and click to grab a whole range.
-3. Click the <img src="docs/buttons/delete.png" alt="trash button" height="24" align="middle" style="vertical-align: middle;"> trash button in your profile row at the bottom of the sidebar, then confirm.
+3. Click the <img src="docs/buttons/delete.png" alt="trash button" height="24" align="top" style="vertical-align: middle;"> trash button in your profile row at the bottom of the sidebar, then confirm.
 
-Press <kbd>Esc</kbd> or click <img src="docs/buttons/done.png" alt="done button" height="24" align="middle" style="vertical-align: middle;"> at any time to stop selecting.
+Press <kbd>Esc</kbd> or click <img src="docs/buttons/done.png" alt="done button" height="24" align="top" style="vertical-align: middle;"> at any time to stop selecting.
 
 **The buttons in your profile row**
 
-- <img src="docs/buttons/select-all.png" alt="Select all button" height="24" align="middle" style="vertical-align: middle;"> **Select all** ticks every loaded chat. Click it again to clear.
-- <img src="docs/buttons/delete.png" alt="Trash button" height="24" align="middle" style="vertical-align: middle;"> **Trash** deletes the ticked chats, and shows how many there are.
-- <img src="docs/buttons/done.png" alt="Done button" height="24" align="middle" style="vertical-align: middle;"> **Done** leaves selection mode.
+- <img src="docs/buttons/select-all.png" alt="Select all button" height="24" align="top" style="vertical-align: middle;"> **Select all** ticks every loaded chat. Click it again to clear.
+- <img src="docs/buttons/delete.png" alt="Trash button" height="24" align="top" style="vertical-align: middle;"> **Trash** deletes the ticked chats, and shows how many there are.
+- <img src="docs/buttons/done.png" alt="Done button" height="24" align="top" style="vertical-align: middle;"> **Done** leaves selection mode.
 
 Progress messages appear just above the profile row.
 
