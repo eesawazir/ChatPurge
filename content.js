@@ -357,10 +357,10 @@
     } else if (left) {
       status(`Deleted ${deleted}. ${left} couldn't be deleted and are still selected.`);
     } else if (gapsLeft) {
-      status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}. Refresh to tidy the sidebar.`, 0,
+      status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}. Refresh to tidy the sidebar.`, 8000,
         { label: 'Refresh', run: () => location.reload() });
     } else {
-      status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}.`, 6000);
+      status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}.`, 2000);
     }
     render();
 
