@@ -26,7 +26,13 @@
   ui.innerHTML = `
     <div class="cmd-panel" role="toolbar" aria-label="Chat selection">
       <button type="button" class="cmd-btn cmd-all">Select all</button>
-      <button type="button" class="cmd-btn cmd-delete" disabled>Delete</button>
+      <button type="button" class="cmd-btn cmd-delete" disabled aria-label="Delete selected chats" title="Delete selected chats">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16"/><path d="M10 11v6M14 11v6"/>
+          <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/>
+          <path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/>
+        </svg><span class="cmd-del-n"></span>
+      </button>
       <button type="button" class="cmd-btn cmd-done">Done</button>
     </div>
     <span class="cmd-sr cmd-count" aria-live="polite"></span>
@@ -74,7 +80,10 @@
     ui.classList.toggle('cmd-busy', state.busy);
     const n = state.selected.size;
     $('.cmd-count').textContent = `${n} selected`;
-    $('.cmd-delete').textContent = n ? `Delete ${n}` : 'Delete';
+    const delLabel = n ? `Delete ${n} ${n === 1 ? 'chat' : 'chats'}` : 'Delete selected chats';
+    $('.cmd-del-n').textContent = n ? String(n) : '';
+    $('.cmd-delete').setAttribute('aria-label', delLabel);
+    $('.cmd-delete').title = delLabel;
     $('.cmd-delete').disabled = n === 0 || state.busy;
     $('.cmd-all').disabled = state.busy;
     $('.cmd-done').disabled = state.busy;

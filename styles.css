@@ -71,7 +71,17 @@ html.dark .cmd-bar {
 .cmd-btn:focus-visible { outline: 2px solid var(--cmd-fg); outline-offset: 1px; }
 .cmd-btn:disabled { opacity: 0.4; cursor: default; }
 
-.cmd-delete { background: var(--cmd-danger); color: #fff; font-variant-numeric: tabular-nums; }
+.cmd-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--cmd-danger);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.cmd-delete svg { flex: none; }
+.cmd-del-n:empty { display: none; }
 .cmd-delete:hover:not(:disabled) { background: var(--cmd-danger); filter: brightness(1.08); }
 
 .cmd-sr {
