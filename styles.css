@@ -1,26 +1,18 @@
-/* ---------- Floating toolbar ---------- */
+/* ---------- Shared tokens (follow ChatGPT's theme variables) ---------- */
+.cmd-trigger,
 .cmd-bar {
-  --cmd-bg: var(--main-surface-primary, #ffffff);
+  --cmd-bg: var(--sidebar-surface-primary, var(--main-surface-primary, #f9f9f9));
   --cmd-fg: var(--text-primary, #0d0d0d);
   --cmd-muted: var(--text-secondary, #5d5d5d);
   --cmd-line: var(--border-medium, rgba(0, 0, 0, 0.15));
   --cmd-hover: rgba(0, 0, 0, 0.06);
   --cmd-danger: #d93025;
-
-  position: fixed;
-  left: 12px;
-  bottom: 76px;
-  z-index: 2147483000;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  max-width: calc(100vw - 24px);
   font: 500 13px/1.3 ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
   color: var(--cmd-fg);
 }
+html.dark .cmd-trigger,
 html.dark .cmd-bar {
-  --cmd-bg: var(--main-surface-primary, #212121);
+  --cmd-bg: var(--sidebar-surface-primary, var(--main-surface-primary, #181818));
   --cmd-fg: var(--text-primary, #ececec);
   --cmd-muted: var(--text-secondary, #b4b4b4);
   --cmd-line: var(--border-medium, rgba(255, 255, 255, 0.15));
@@ -28,25 +20,59 @@ html.dark .cmd-bar {
   --cmd-danger: #f0564b;
 }
 
-.cmd-panel,
-.cmd-status {
+/* ---------- Trigger in the profile row ---------- */
+.cmd-trigger {
+  position: fixed;
+  z-index: 2147483000;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--cmd-line);
+  border-radius: 999px;
   background: var(--cmd-bg);
+  cursor: pointer;
+}
+.cmd-trigger[hidden] { display: none; }
+.cmd-trigger:hover { background: var(--cmd-hover); }
+.cmd-trigger:focus-visible { outline: 2px solid var(--cmd-fg); outline-offset: 2px; }
+
+/* ---------- Toolbar: covers the profile row while selecting ---------- */
+.cmd-bar {
+  position: fixed;
+  z-index: 2147483000;
+  box-sizing: border-box;
+  display: none;
+  flex-direction: column-reverse; /* status stacks above the buttons */
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  background: var(--cmd-bg);
+  border-top: 1px solid var(--cmd-line);
+}
+.cmd-bar.cmd-on { display: flex; }
+.cmd-bar.cmd-floating {
+  left: 12px;
+  bottom: 12px;
+  width: 260px;
   border: 1px solid var(--cmd-line);
   border-radius: 12px;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
 }
+.cmd-bar.cmd-busy { cursor: progress; }
+
 .cmd-panel {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
-  padding: 4px;
+  gap: 4px;
 }
+.cmd-panel .cmd-delete { flex: 1; }
+
 .cmd-status {
-  padding: 6px 10px;
   font-size: 12px;
   color: var(--cmd-muted);
-  max-width: 280px;
+  padding: 0 4px;
 }
 .cmd-status:empty { display: none; }
 
@@ -56,26 +82,26 @@ html.dark .cmd-bar {
   background: transparent;
   color: inherit;
   font: inherit;
-  padding: 6px 10px;
+  padding: 7px 10px;
   border-radius: 8px;
   cursor: pointer;
+  white-space: nowrap;
 }
 .cmd-btn:hover:not(:disabled) { background: var(--cmd-hover); }
 .cmd-btn:focus-visible { outline: 2px solid var(--cmd-fg); outline-offset: 1px; }
 .cmd-btn:disabled { opacity: 0.4; cursor: default; }
 
-.cmd-delete { background: var(--cmd-danger); color: #fff; }
+.cmd-delete { background: var(--cmd-danger); color: #fff; font-variant-numeric: tabular-nums; }
 .cmd-delete:hover:not(:disabled) { background: var(--cmd-danger); filter: brightness(1.08); }
 
-.cmd-count {
-  padding: 6px 8px;
-  color: var(--cmd-muted);
-  font-variant-numeric: tabular-nums;
+.cmd-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
-
-.cmd-bar:not(.cmd-on) .cmd-tool { display: none; }
-.cmd-bar.cmd-on .cmd-start { display: none; }
-.cmd-bar.cmd-busy { cursor: progress; }
 
 /* ---------- Sidebar rows in selection mode ---------- */
 a.cmd-row {

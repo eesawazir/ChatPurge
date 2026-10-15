@@ -20,21 +20,36 @@
   const rows = () =>
     [...document.querySelectorAll(ROW_SELECTOR)].filter((a) => idOf(a) && !a.closest('.cmd-gone'));
 
-  // ---- Toolbar UI -----------------------------------------------------------
+  // ---- UI: a small trigger in the profile row, and a toolbar that covers ---
+  // ---- the profile row while selecting (so no chats are ever hidden). -------
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'cmd-trigger';
+  trigger.title = 'Select chats (Alt+Shift+D)';
+  trigger.setAttribute('aria-label', 'Select chats');
+  trigger.innerHTML = `
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <rect x="1.75" y="1.75" width="12.5" height="12.5" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M4.75 8.25l2.25 2.25 4.25-4.75" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg><span>Select</span>`;
+  trigger.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActive(true);
+  });
+
   const ui = document.createElement('div');
   ui.className = 'cmd-bar';
   ui.innerHTML = `
     <div class="cmd-panel" role="toolbar" aria-label="Chat selection">
-      <button type="button" class="cmd-btn cmd-start" title="Alt+Shift+D">Select chats</button>
-      <span class="cmd-tool cmd-count" aria-live="polite">0 selected</span>
-      <button type="button" class="cmd-tool cmd-btn cmd-all">Select all</button>
-      <button type="button" class="cmd-tool cmd-btn cmd-delete" disabled>Delete</button>
-      <button type="button" class="cmd-tool cmd-btn cmd-done">Done</button>
+      <button type="button" class="cmd-btn cmd-all">Select all</button>
+      <button type="button" class="cmd-btn cmd-delete" disabled>Delete</button>
+      <button type="button" class="cmd-btn cmd-done">Done</button>
     </div>
+    <span class="cmd-sr cmd-count" aria-live="polite"></span>
     <div class="cmd-status" role="status" aria-live="polite"></div>`;
   const $ = (sel) => ui.querySelector(sel);
 
-  $('.cmd-start').addEventListener('click', () => setActive(true));
   $('.cmd-done').addEventListener('click', () => setActive(false));
   $('.cmd-delete').addEventListener('click', deleteSelected);
   $('.cmd-all').addEventListener('click', () => {
@@ -44,6 +59,79 @@
     else ids.forEach((id) => state.selected.add(id));
     render();
   });
+
+  // ---- Find the profile row (avatar + name) at the bottom of the sidebar ---
+  // ChatGPT's markup has no stable hook for it, so this works from geometry:
+  // find the full-height sidebar, look at what sits at its bottom-left corner,
+  // and climb to the row that spans the sidebar's width.
+  function findSidebar() {
+    let el = document.querySelector(ROW_SELECTOR);
+    while (el && el !== document.body) {
+      const r = el.getBoundingClientRect();
+      if (r.height >= innerHeight * 0.8 && r.width < innerWidth * 0.6) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function findProfileRow() {
+    const side = findSidebar();
+    if (!side) return null;
+    const sr = side.getBoundingClientRect();
+    if (sr.width < 180) return null; // collapsed icon rail
+    const hit = document
+      .elementsFromPoint(sr.left + 28, sr.bottom - 26)
+      .find((el) => !ui.contains(el) && !trigger.contains(el) && side.contains(el));
+    if (!hit || hit.closest(ROW_SELECTOR)) return null; // that's a chat, not the footer
+    let el = hit;
+    while (el.parentElement && el.parentElement !== side) {
+      if (el.getBoundingClientRect().width >= sr.width * 0.8) break;
+      el = el.parentElement;
+    }
+    const r = el.getBoundingClientRect();
+    if (r.height < 28 || r.height > 120 || el.querySelector('a[href*="/c/"]')) return null;
+    return el;
+  }
+
+  function place() {
+    const row = findProfileRow();
+    const r = row?.getBoundingClientRect();
+
+    // Trigger: right side of the profile row, vertically centred.
+    if (r && !state.active) {
+      trigger.hidden = false;
+      const h = trigger.offsetHeight || 28;
+      trigger.style.top = `${Math.round(r.top + (r.height - h) / 2)}px`;
+      trigger.style.left = `${Math.round(r.right - trigger.offsetWidth - 10)}px`;
+    } else {
+      trigger.hidden = true; // sidebar closed: use the toolbar icon or Alt+Shift+D
+    }
+
+    // Toolbar: sits exactly over the profile row, growing upward if a status shows.
+    if (r) {
+      ui.classList.remove('cmd-floating');
+      ui.style.left = `${Math.round(r.left)}px`;
+      ui.style.width = `${Math.round(r.width)}px`;
+      ui.style.bottom = `${Math.round(innerHeight - r.bottom)}px`;
+      ui.style.minHeight = `${Math.round(r.height)}px`;
+    } else {
+      ui.classList.add('cmd-floating');
+      ui.style.cssText = '';
+    }
+  }
+
+  let placeQueued = false;
+  const schedulePlace = () => {
+    if (placeQueued) return;
+    placeQueued = true;
+    requestAnimationFrame(() => {
+      placeQueued = false;
+      place();
+    });
+  };
+  addEventListener('resize', schedulePlace);
+  document.addEventListener('transitionend', schedulePlace, true); // sidebar open/close
+  setInterval(schedulePlace, 1000); // cheap safety net for layout shifts we can't observe
 
   function status(msg, autoClearMs = 0, action = null) {
     clearTimeout(statusTimer);
@@ -76,6 +164,7 @@
     ui.classList.toggle('cmd-busy', state.busy);
     const n = state.selected.size;
     $('.cmd-count').textContent = `${n} selected`;
+    $('.cmd-delete').textContent = n ? `Delete ${n}` : 'Delete';
     $('.cmd-delete').disabled = n === 0 || state.busy;
     $('.cmd-all').disabled = state.busy;
     $('.cmd-done').disabled = state.busy;
@@ -83,6 +172,7 @@
     const allSelected = ids.length > 0 && ids.every((id) => state.selected.has(id));
     $('.cmd-all').textContent = allSelected ? 'Clear' : 'Select all';
     decorate();
+    place();
   }
 
   // ---- Checkboxes on sidebar rows ------------------------------------------
@@ -195,6 +285,7 @@
   // ChatGPT re-renders the sidebar constantly (and lazy-loads more chats on scroll).
   let queued = false;
   new MutationObserver(() => {
+    schedulePlace();
     if (!state.active || queued) return;
     queued = true;
     requestAnimationFrame(() => {
@@ -281,6 +372,6 @@
     if (msg?.type === 'cmd-toggle') setActive(!state.active);
   });
 
-  document.body.append(ui);
+  document.body.append(trigger, ui);
   render();
 })();

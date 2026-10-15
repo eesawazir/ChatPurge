@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatPurge",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Adds checkboxes to the ChatGPT sidebar so you can bulk-delete chats.",
   "action": { "default_title": "Toggle chat selection (Alt+Shift+D)" },
   "background": { "service_worker": "background.js" },
