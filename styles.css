@@ -1,4 +1,5 @@
 /* ---------- Shared tokens (follow ChatGPT's theme variables) ---------- */
+.cmd-trigger,
 .cmd-bar {
   --cmd-bg: var(--sidebar-surface-primary, var(--main-surface-primary, #f9f9f9));
   --cmd-fg: var(--text-primary, #0d0d0d);
@@ -9,6 +10,7 @@
   font: 500 13px/1.3 ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
   color: var(--cmd-fg);
 }
+html.dark .cmd-trigger,
 html.dark .cmd-bar {
   --cmd-bg: var(--sidebar-surface-primary, var(--main-surface-primary, #181818));
   --cmd-fg: var(--text-primary, #ececec);
@@ -17,6 +19,23 @@ html.dark .cmd-bar {
   --cmd-hover: rgba(255, 255, 255, 0.08);
   --cmd-danger: #f0564b;
 }
+
+/* ---------- "Select" button in the profile row ---------- */
+.cmd-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--cmd-line);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cmd-trigger[hidden] { display: none; }
+.cmd-trigger:hover { background: var(--cmd-hover); }
+.cmd-trigger:focus-visible { outline: 2px solid var(--cmd-fg); outline-offset: 2px; }
 
 /* ---------- Toolbar (bottom-left, over the profile row) ---------- */
 .cmd-bar {

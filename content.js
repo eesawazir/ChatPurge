@@ -20,7 +20,52 @@
   const rows = () =>
     [...document.querySelectorAll(ROW_SELECTOR)].filter((a) => idOf(a) && !a.closest('.cmd-gone'));
 
-  // ---- Toolbar (opened from the extension icon or Alt+Shift+D) ------------
+  // ---- "Select" button in the profile row ----------------------------------
+  // The profile row has a trailing container (class "empty:hidden") that
+  // ChatGPT keeps hidden while it's empty. We mount the button inside it.
+  const PROFILE_BTN = 'button[aria-label="Open profile menu"]';
+  const SLOT = ':scope > .empty\\:hidden';
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'cmd-trigger';
+  trigger.title = 'Select chats (Alt+Shift+D)';
+  trigger.innerHTML = `
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <rect x="1.75" y="1.75" width="12.5" height="12.5" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M4.75 8.25l2.25 2.25 4.25-4.75" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg><span>Select</span>`;
+  trigger.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation(); // never let the click reach the profile menu
+    setActive(true);
+  });
+
+  function findProfileSlot() {
+    let btn = document.querySelector(PROFILE_BTN);
+    if (!btn) {
+      // Non-English UI translates the aria-label; fall back to the menu
+      // button that sits beside the avatar image.
+      btn = [...document.querySelectorAll('nav button[aria-haspopup="menu"], aside button[aria-haspopup="menu"]')]
+        .find((b) => b.parentElement?.querySelector('img.rounded-full'));
+    }
+    if (!btn) return null;
+    let el = btn.parentElement;
+    for (let depth = 0; el && el !== document.body && depth < 8; depth++, el = el.parentElement) {
+      const slot = el.querySelector(SLOT);
+      if (slot) return slot;
+    }
+    return null;
+  }
+
+  function mountTrigger() {
+    const slot = findProfileSlot();
+    if (slot && trigger.parentElement !== slot) slot.append(trigger);
+    // No slot found (sidebar closed, or markup changed): the toolbar icon
+    // and Alt+Shift+D still work.
+  }
+
+  // ---- Toolbar (opened from the profile-row button, extension icon, or Alt+Shift+D)
   const ui = document.createElement('div');
   ui.className = 'cmd-bar cmd-floating';
   ui.innerHTML = `
@@ -77,6 +122,7 @@
 
   function render() {
     ui.classList.toggle('cmd-on', state.active);
+    trigger.hidden = state.active;
     ui.classList.toggle('cmd-busy', state.busy);
     const n = state.selected.size;
     $('.cmd-count').textContent = `${n} selected`;
@@ -202,7 +248,15 @@
 
   // ChatGPT re-renders the sidebar constantly (and lazy-loads more chats on scroll).
   let queued = false;
+  let mountQueued = false;
   new MutationObserver(() => {
+    if (!mountQueued) {
+      mountQueued = true;
+      requestAnimationFrame(() => {
+        mountQueued = false;
+        mountTrigger(); // React re-renders the footer; put the button back if needed
+      });
+    }
     if (!state.active || queued) return;
     queued = true;
     requestAnimationFrame(() => {
@@ -290,5 +344,6 @@
   });
 
   document.body.append(ui);
+  mountTrigger();
   render();
 })();
