@@ -9,7 +9,7 @@ Adds checkboxes to the chatgpt.com sidebar so you can delete many chats at once.
 4. Open or reload https://chatgpt.com.
 
 ## Use
-- Click **Select** (next to your name at the bottom of the sidebar), the extension's toolbar icon, or press **Alt+Shift+D**.
+- Click the extension's icon in the Chrome toolbar, or press **Alt+Shift+D**.
 - Click rows to tick them. **Shift+click** selects a range.
 - **Select all** ticks every chat currently loaded in the sidebar. Scroll the sidebar first to load older chats.
 - Click **Delete**, confirm, and wait for the progress message. **Esc** or **Done** exits.
