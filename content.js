@@ -59,28 +59,35 @@
   }
 
   let profileRow = null;
+  let profileSlot = null;
 
   function mountTrigger() {
     const found = findProfileSlot();
     profileRow = found?.row ?? null;
+    profileSlot = found?.slot ?? null;
     if (found && trigger.parentElement !== found.slot) found.slot.append(trigger);
     placeToolbar();
     // No slot found (sidebar closed, or markup changed): the toolbar icon
     // and Alt+Shift+D still work.
   }
 
-  // While selecting, the toolbar sits exactly on top of the profile row.
-  // If the row can't be found, it floats in the bottom-left corner instead.
+  // While selecting, the buttons replace "Select" in the profile row's trailing
+  // slot, so the avatar and name stay visible. Status messages go in a strip
+  // just above the row (only while there is one). If the slot can't be found,
+  // everything floats in the bottom-left corner instead.
   function placeToolbar() {
-    if (!state.active) return;
-    const r = profileRow?.isConnected ? profileRow.getBoundingClientRect() : null;
+    if (!state.active) { panel.remove(); return; }
+    const r = profileSlot?.isConnected && profileRow?.isConnected ? profileRow.getBoundingClientRect() : null;
     if (r && r.width > 120 && r.height > 0) {
+      if (panel.parentElement !== profileSlot) profileSlot.append(panel);
       ui.classList.remove('cmd-floating');
+      ui.classList.add('cmd-docked');
       ui.style.left = `${Math.round(r.left)}px`;
       ui.style.width = `${Math.round(r.width)}px`;
-      ui.style.bottom = `${Math.round(innerHeight - r.bottom)}px`;
-      ui.style.minHeight = `${Math.round(r.height)}px`;
+      ui.style.bottom = `${Math.round(innerHeight - r.top)}px`;
     } else {
+      if (panel.parentElement !== ui) ui.prepend(panel);
+      ui.classList.remove('cmd-docked');
       ui.classList.add('cmd-floating');
       ui.style.cssText = '';
     }
@@ -88,23 +95,33 @@
   addEventListener('resize', () => placeToolbar());
 
   // ---- Toolbar (opened from the profile-row button, extension icon, or Alt+Shift+D)
+  const SVG = 'viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  const panel = document.createElement('div');
+  panel.className = 'cmd-panel';
+  panel.setAttribute('role', 'toolbar');
+  panel.setAttribute('aria-label', 'Chat selection');
+  panel.innerHTML = `
+    <button type="button" class="cmd-btn cmd-icon cmd-all" aria-label="Select all chats" title="Select all chats">
+      <svg class="cmd-i-all" ${SVG}><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8 12.25l3 3 5-6"/></svg>
+      <svg class="cmd-i-clear" ${SVG}><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8 12h8"/></svg>
+    </button>
+    <button type="button" class="cmd-btn cmd-icon cmd-delete" disabled aria-label="Delete selected chats" title="Delete selected chats">
+      <svg ${SVG}>
+        <path d="M4 7h16"/><path d="M10 11v6M14 11v6"/>
+        <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/>
+        <path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/>
+      </svg><span class="cmd-del-n"></span>
+    </button>
+    <button type="button" class="cmd-btn cmd-icon cmd-done" aria-label="Done" title="Done (Esc)">
+      <svg ${SVG}><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>`;
+
   const ui = document.createElement('div');
   ui.className = 'cmd-bar cmd-floating';
   ui.innerHTML = `
-    <div class="cmd-panel" role="toolbar" aria-label="Chat selection">
-      <button type="button" class="cmd-btn cmd-all">Select all</button>
-      <button type="button" class="cmd-btn cmd-delete" disabled aria-label="Delete selected chats" title="Delete selected chats">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 7h16"/><path d="M10 11v6M14 11v6"/>
-          <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/>
-          <path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/>
-        </svg><span class="cmd-del-n"></span>
-      </button>
-      <button type="button" class="cmd-btn cmd-done">Done</button>
-    </div>
     <span class="cmd-sr cmd-count" aria-live="polite"></span>
     <div class="cmd-status" role="status" aria-live="polite"></div>`;
-  const $ = (sel) => ui.querySelector(sel);
+  const $ = (sel) => panel.querySelector(sel) ?? ui.querySelector(sel);
 
   $('.cmd-done').addEventListener('click', () => setActive(false));
   $('.cmd-delete').addEventListener('click', deleteSelected);
@@ -120,6 +137,7 @@
     clearTimeout(statusTimer);
     const el = $('.cmd-status');
     el.textContent = msg;
+    ui.classList.toggle('cmd-has-status', !!msg);
     if (action) {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -128,8 +146,13 @@
       btn.addEventListener('click', action.run);
       el.append(' ', btn);
     }
-    if (autoClearMs) statusTimer = setTimeout(() => (el.textContent = ''), autoClearMs);
+    if (autoClearMs) statusTimer = setTimeout(() => status(''), autoClearMs);
   }
+
+  // Click a message to dismiss it (errors otherwise stay until the next action).
+  $('.cmd-status').addEventListener('click', (e) => {
+    if (!e.target.closest('button')) status('');
+  });
 
   function setActive(on) {
     if (state.busy) return;
@@ -158,7 +181,10 @@
     $('.cmd-done').disabled = state.busy;
     const ids = rows().map(idOf);
     const allSelected = ids.length > 0 && ids.every((id) => state.selected.has(id));
-    $('.cmd-all').textContent = allSelected ? 'Clear' : 'Select all';
+    const allLabel = allSelected ? 'Clear selection' : 'Select all chats';
+    $('.cmd-all').classList.toggle('cmd-all-on', allSelected);
+    $('.cmd-all').setAttribute('aria-label', allLabel);
+    $('.cmd-all').title = allLabel;
     decorate();
   }
 

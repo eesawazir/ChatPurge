@@ -1,5 +1,6 @@
 /* ---------- Shared tokens (follow ChatGPT's theme variables) ---------- */
 .cmd-trigger,
+.cmd-panel,
 .cmd-bar {
   --cmd-bg: var(--sidebar-surface-primary, var(--main-surface-primary, #f9f9f9));
   --cmd-fg: var(--text-primary, #0d0d0d);
@@ -11,6 +12,7 @@
   color: var(--cmd-fg);
 }
 html.dark .cmd-trigger,
+html.dark .cmd-panel,
 html.dark .cmd-bar {
   --cmd-bg: var(--sidebar-surface-primary, var(--main-surface-primary, #181818));
   --cmd-fg: var(--text-primary, #ececec);
@@ -37,7 +39,9 @@ html.dark .cmd-bar {
 .cmd-trigger:hover { background: var(--cmd-hover); }
 .cmd-trigger:focus-visible { outline: 2px solid var(--cmd-fg); outline-offset: 2px; }
 
-/* ---------- Toolbar (bottom-left, over the profile row) ---------- */
+/* ---------- Status strip / floating fallback ---------- */
+/* Docked: only a status strip just above the profile row, shown while there is a message.
+   Floating (slot not found): the buttons and status share a small card bottom-left. */
 .cmd-bar {
   position: fixed;
   z-index: 2147483000;
@@ -51,6 +55,8 @@ html.dark .cmd-bar {
   border-radius: 12px;
 }
 .cmd-bar.cmd-on { display: flex; }
+.cmd-bar.cmd-docked { display: none; padding: 6px 12px; border-top: 1px solid var(--cmd-line); border-radius: 8px 8px 0 0; }
+.cmd-bar.cmd-docked.cmd-on.cmd-has-status { display: flex; }
 .cmd-bar.cmd-floating {
   left: 12px;
   bottom: 12px;
@@ -61,12 +67,14 @@ html.dark .cmd-bar {
 }
 .cmd-bar.cmd-busy { cursor: progress; }
 
+/* Buttons: compact icons, mounted in the profile row's trailing slot. */
 .cmd-panel {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  font: 500 13px/1.3 ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
 }
-.cmd-panel .cmd-done { margin-left: auto; }
+.cmd-panel .cmd-done { margin-left: 4px; }
 
 .cmd-status {
   font-size: 12px;
@@ -90,13 +98,25 @@ html.dark .cmd-bar {
 .cmd-btn:focus-visible { outline: 2px solid var(--cmd-fg); outline-offset: 1px; }
 .cmd-btn:disabled { opacity: 0.4; cursor: default; }
 
-.cmd-delete {
+.cmd-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 6px 10px;
-  min-width: 36px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 6px;
+}
+.cmd-icon svg { flex: none; }
+.cmd-all .cmd-i-clear,
+.cmd-all.cmd-all-on .cmd-i-all { display: none; }
+.cmd-all.cmd-all-on .cmd-i-clear { display: inline; }
+
+.cmd-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
   background: var(--cmd-danger);
   color: #fff;
   font-variant-numeric: tabular-nums;
