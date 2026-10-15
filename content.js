@@ -53,17 +53,39 @@
     let el = btn.parentElement;
     for (let depth = 0; el && el !== document.body && depth < 8; depth++, el = el.parentElement) {
       const slot = el.querySelector(SLOT);
-      if (slot) return slot;
+      if (slot) return { slot, row: el };
     }
     return null;
   }
 
+  let profileRow = null;
+
   function mountTrigger() {
-    const slot = findProfileSlot();
-    if (slot && trigger.parentElement !== slot) slot.append(trigger);
+    const found = findProfileSlot();
+    profileRow = found?.row ?? null;
+    if (found && trigger.parentElement !== found.slot) found.slot.append(trigger);
+    placeToolbar();
     // No slot found (sidebar closed, or markup changed): the toolbar icon
     // and Alt+Shift+D still work.
   }
+
+  // While selecting, the toolbar sits exactly on top of the profile row.
+  // If the row can't be found, it floats in the bottom-left corner instead.
+  function placeToolbar() {
+    if (!state.active) return;
+    const r = profileRow?.isConnected ? profileRow.getBoundingClientRect() : null;
+    if (r && r.width > 120 && r.height > 0) {
+      ui.classList.remove('cmd-floating');
+      ui.style.left = `${Math.round(r.left)}px`;
+      ui.style.width = `${Math.round(r.width)}px`;
+      ui.style.bottom = `${Math.round(innerHeight - r.bottom)}px`;
+      ui.style.minHeight = `${Math.round(r.height)}px`;
+    } else {
+      ui.classList.add('cmd-floating');
+      ui.style.cssText = '';
+    }
+  }
+  addEventListener('resize', () => placeToolbar());
 
   // ---- Toolbar (opened from the profile-row button, extension icon, or Alt+Shift+D)
   const ui = document.createElement('div');
@@ -123,6 +145,7 @@
   function render() {
     ui.classList.toggle('cmd-on', state.active);
     trigger.hidden = state.active;
+    placeToolbar();
     ui.classList.toggle('cmd-busy', state.busy);
     const n = state.selected.size;
     $('.cmd-count').textContent = `${n} selected`;

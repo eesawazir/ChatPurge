@@ -46,9 +46,9 @@ html.dark .cmd-bar {
   flex-direction: column-reverse; /* status stacks above the buttons */
   justify-content: center;
   gap: 6px;
-  padding: 8px;
+  padding: 6px 8px;
   background: var(--cmd-bg);
-  border-top: 1px solid var(--cmd-line);
+  border-radius: 12px;
 }
 .cmd-bar.cmd-on { display: flex; }
 .cmd-bar.cmd-floating {
@@ -66,7 +66,7 @@ html.dark .cmd-bar {
   align-items: center;
   gap: 4px;
 }
-.cmd-panel .cmd-delete { flex: 1; }
+.cmd-panel .cmd-done { margin-left: auto; }
 
 .cmd-status {
   font-size: 12px;
@@ -94,7 +94,9 @@ html.dark .cmd-bar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
+  padding: 6px 10px;
+  min-width: 36px;
   background: var(--cmd-danger);
   color: #fff;
   font-variant-numeric: tabular-nums;
