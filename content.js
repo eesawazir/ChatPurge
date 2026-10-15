@@ -20,26 +20,12 @@
   const rows = () =>
     [...document.querySelectorAll(ROW_SELECTOR)].filter((a) => idOf(a) && !a.closest('.cmd-gone'));
 
-  // ---- "Select" button in the profile row ----------------------------------
+  // ---- Profile row slot ----------------------------------------------------
   // The profile row has a trailing container (class "empty:hidden") that
-  // ChatGPT keeps hidden while it's empty. We mount the button inside it.
+  // ChatGPT keeps hidden while it's empty. While selecting, the toolbar
+  // buttons are mounted inside it, beside the user's name.
   const PROFILE_BTN = 'button[aria-label="Open profile menu"]';
   const SLOT = ':scope > .empty\\:hidden';
-
-  const trigger = document.createElement('button');
-  trigger.type = 'button';
-  trigger.className = 'cmd-trigger';
-  trigger.title = 'Select chats (Alt+Shift+D)';
-  trigger.innerHTML = `
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <rect x="1.75" y="1.75" width="12.5" height="12.5" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
-      <path d="M4.75 8.25l2.25 2.25 4.25-4.75" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg><span>Select</span>`;
-  trigger.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation(); // never let the click reach the profile menu
-    setActive(true);
-  });
 
   // Walk up from an element to the nearest ancestor that has the empty slot as a direct child.
   function slotAbove(el) {
@@ -73,20 +59,19 @@
   let profileRow = null;
   let profileSlot = null;
 
-  function mountTrigger() {
+  function trackProfileRow() {
     const found = findProfileSlot();
     profileRow = found?.row ?? null;
     profileSlot = found?.slot ?? null;
-    if (found && trigger.parentElement !== found.slot) found.slot.append(trigger);
     placeToolbar();
-    // No slot found (sidebar closed, or markup changed): the toolbar icon
-    // and Alt+Shift+D still work.
+    // No slot found (sidebar closed, or markup changed): the toolbar then
+    // falls back to a floating card.
   }
 
-  // While selecting, the buttons replace "Select" in the profile row's trailing
-  // slot, so the avatar and name stay visible. Status messages go in a strip
-  // just above the row (only while there is one). If the slot can't be found,
-  // everything floats in the bottom-left corner instead.
+  // While selecting, the buttons sit in the profile row's trailing slot, so the
+  // avatar and name stay visible. Status messages go in a strip just above the
+  // row (only while there is one). If the slot can't be found, everything floats
+  // in a small card at the sidebar's bottom-right instead.
   function placeToolbar() {
     if (!state.active) { panel.remove(); return; }
     const r = profileSlot?.isConnected && profileRow?.isConnected ? profileRow.getBoundingClientRect() : null;
@@ -185,7 +170,6 @@
 
   function render() {
     ui.classList.toggle('cmd-on', state.active);
-    trigger.hidden = state.active;
     placeToolbar();
     ui.classList.toggle('cmd-busy', state.busy);
     const n = state.selected.size;
@@ -321,7 +305,7 @@
       mountQueued = true;
       requestAnimationFrame(() => {
         mountQueued = false;
-        mountTrigger(); // React re-renders the footer; put the button back if needed
+        trackProfileRow(); // React re-renders the footer; keep the slot reference fresh
       });
     }
     if (!state.active || queued) return;
@@ -411,6 +395,6 @@
   });
 
   document.body.append(ui);
-  mountTrigger();
+  trackProfileRow();
   render();
 })();
