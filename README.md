@@ -24,9 +24,16 @@ Deleting chats one at a time is slow. ChatPurge adds checkboxes to the ChatGPT a
 - 🗑️ **Delete them together**, with a live progress message
 - 👀 **Stays out of the way:** nothing changes on the page until you start selecting
 
-<p align="center">
-  <img src="docs/demo.gif" width="720" alt="Selecting two chats in the ChatGPT sidebar with Alt+Shift+D, confirming, and watching them get deleted with ChatPurge">
-</p>
+<table align="center" style="margin-left: auto; margin-right: auto;">
+  <tr>
+    <th align="center">ChatGPT</th>
+    <th align="center">Claude</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/demo.gif" height="260" alt="Selecting two chats in the ChatGPT sidebar with Alt+Shift+D, confirming, and watching them get deleted with ChatPurge"></td>
+    <td align="center"><img src="docs/demo-claude.gif" height="260" alt="Selecting two chats in the Claude sidebar from the toolbar icon, confirming, and watching them get deleted with ChatPurge"></td>
+  </tr>
+</table>
 
 <!--
 📸 SCREENSHOTS: save them in docs/, then remove these comment markers.
