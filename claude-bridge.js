@@ -6,6 +6,7 @@
 // finishes, content.js dispatches "cmd:refresh-lists" and this script asks the app to refetch
 // its chat and Cowork session lists. It answers with "cmd:lists-refreshed" so content.js knows when it is done.
 //
+// It also catches up after a reload that came too soon after a delete (see catchUpAfterReload).
 // If the cache client can't be found or changes shape, this does nothing: deleting still works.
 (() => {
   'use strict';
@@ -36,17 +37,43 @@
   }
 
   const reply = () => document.dispatchEvent(new CustomEvent('cmd:lists-refreshed'));
+  const refresh = () => Promise.resolve(client.invalidateQueries({ predicate: (q) => LISTS.includes(q.queryKey?.[0]) }))
+    .catch(() => {});
 
   document.addEventListener('cmd:refresh-lists', () => {
     try {
       client ??= findClient();
       if (!client) return reply();
-      Promise.resolve(client.invalidateQueries({ predicate: (q) => LISTS.includes(q.queryKey?.[0]) }))
-        .catch(() => {})
-        .finally(reply);
+      refresh().finally(reply);
     } catch {
       client = null;
       reply();
     }
   });
+
+  // A reload soon after a delete (or during a batch) can restore the app's saved list from before the
+  // delete, which it then treats as current for about a minute. content.js records when it last deleted
+  // something; if that was recent, wait until the app has restored its list and ask it to refetch.
+  const RECENT_DELETE_KEY = 'chatpurge:last-delete';
+  const CATCH_UP_MS = 5 * 60e3;
+  const CATCH_UP_WAIT_MS = 15e3;
+  function catchUpAfterReload() {
+    let last = 0;
+    try { last = Number(localStorage.getItem(RECENT_DELETE_KEY)) || 0; } catch { return; }
+    if (!last || Date.now() - last > CATCH_UP_MS) return;
+    const started = Date.now();
+    const tick = () => {
+      try {
+        client ??= findClient();
+        const restored = client?.getQueryCache?.().getAll()
+          .some((q) => q.queryKey?.[0] === 'chat_conversation_list' && q.state.data);
+        if (restored) { refresh(); return; }
+      } catch {
+        client = null;
+      }
+      if (Date.now() - started < CATCH_UP_WAIT_MS) setTimeout(tick, 250);
+    };
+    tick();
+  }
+  catchUpAfterReload();
 })();

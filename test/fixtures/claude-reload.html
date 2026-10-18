@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ChatPurge fixture: claude.ai reload after a delete</title>
+<div id="root"></div>
+<script src="harness.js"></script>
+<script>
+  // The page was reloaded 30 s after a ChatPurge delete, before the app saved its refreshed list.
+  localStorage.setItem('chatpurge:last-delete', String(Date.now() - 30e3));
+
+  // The app's cache client shows up after 300 ms and restores its saved list at 800 ms.
+  const invalidations = [];
+  let restoredAt = 0;
+  const list = { queryKey: ['chat_conversation_list', {}, 'infinite', {}], state: { data: undefined } };
+  const client = {
+    getQueryCache: () => ({ getAll: () => [list] }),
+    invalidateQueries: (o) => { invalidations.push({ at: Date.now(), o }); return Promise.resolve(); },
+  };
+  setTimeout(() => { document.getElementById('root').__reactContainer$test = { memoizedProps: {}, child: { memoizedProps: { client } } }; }, 300);
+  setTimeout(() => { list.state.data = { pages: [{ data: [], has_more: false }], pageParams: [0] }; restoredAt = Date.now(); }, 800);
+</script>
+<script src="/src/claude-bridge.js"></script>
+<script>
+(async () => {
+  try {
+    await sleep(500);
+    check('no refresh before the app has restored its list', invalidations.length === 0);
+    await waitFor(() => invalidations.length > 0, 5000);
+    check('lists are refetched once the saved list is restored', invalidations.length === 1 && invalidations[0].at >= restoredAt && restoredAt > 0);
+    const pred = invalidations[0]?.o?.predicate;
+    check('the catch-up refresh covers the chat and Cowork lists', !!pred && pred({ queryKey: ['chat_conversation_list'] })
+      && pred({ queryKey: ['cowork-remote-sessions'] }) && !pred({ queryKey: ['chat_conversation_tree'] }));
+    await sleep(800);
+    check('it refetches only once', invalidations.length === 1);
+  } catch (e) { finish(e); return; }
+  finish();
+})();
+</script>

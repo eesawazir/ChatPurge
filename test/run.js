@@ -24,6 +24,7 @@ const FIXTURES = [
   // (Chrome would force https), so the ChatGPT fixture is served from localhost.
   { file: 'chatgpt.html', host: 'localhost' },
   { file: 'claude.html', host: 'claude.ai' },
+  { file: 'claude-reload.html', host: 'claude.ai' },
 ];
 
 function findChrome() {

@@ -457,6 +457,15 @@
     });
   }
 
+  // claude.ai: if the page reloads before the app has saved its refreshed list (or in the middle of a
+  // batch), the app restores its old list, deleted chats included, and treats it as current for about
+  // a minute. claude-bridge.js reads this timestamp on load and asks the app to refetch from the server.
+  const RECENT_DELETE_KEY = 'chatpurge:last-delete';
+  function markRecentDelete() {
+    if (!isClaude) return;
+    try { localStorage.setItem(RECENT_DELETE_KEY, String(Date.now())); } catch { /* storage unavailable */ }
+  }
+
   async function sendDelete(id, attempt) {
     if (isClaude && isCowork(id)) {
       // Same request claude.ai sends; without anthropic-version the server answers 400.
@@ -532,6 +541,7 @@
 
     state.busy = true;
     render();
+    markRecentDelete(); // before the first request, so a reload mid-batch is covered too
     const openId = idIn(location.pathname);
     let deleted = 0;
     let stoppedEarly = null;
@@ -567,7 +577,10 @@
     }
     render(); // still busy: the buttons stay disabled until the refresh and any navigation are done
 
-    if (deleted) await refreshSiteLists();
+    if (deleted) {
+      markRecentDelete();
+      await refreshSiteLists();
+    }
     if (openId && ids.includes(openId) && !state.selected.has(openId)) {
       if (isClaude) await sleep(1200); // let the app persist its refreshed list before we leave the page
       location.assign(SITE.home);

@@ -35,6 +35,8 @@
   const A = '00000000-0000-4000-8000-0000000000a1', B = '00000000-0000-4000-8000-0000000000b2', C = '00000000-0000-4000-8000-0000000000c3';
   const D = '00000000-0000-4000-8000-0000000000d4', K_OK = 'cse_01Ok', K_DENIED = 'cse_01Denied';
   document.cookie = `lastActiveOrg=${ORG1}; path=/`;
+  // A delete from 10 minutes ago is too old for the bridge's catch-up refresh on load.
+  localStorage.setItem('chatpurge:last-delete', String(Date.now() - 10 * 60e3));
   localStorage.setItem('claude-conversation-ledger', JSON.stringify([A, B, C, D].map((u) => ({ u, at: 1, c: 0, p: 0 }))));
 
   const calls = [];
@@ -64,6 +66,8 @@
     const ledger = () => JSON.parse(localStorage.getItem('claude-conversation-ledger'));
     const deletes = () => calls.filter((c) => c.method === 'DELETE');
 
+    await sleep(600);
+    check('no catch-up refresh on load when the last delete is old', invalidations.length === 0);
     await frames2();
     check('idle: nothing injected', !panel() && !document.querySelector('.cmd-check, .cmd-bar'));
 
@@ -84,6 +88,8 @@
     await frames2();
     panel().querySelector('.cmd-delete').click();
     await waitFor(() => say().includes("couldn't be deleted"));
+    check('the time of the delete is recorded for the next page load',
+      Math.abs(Date.now() - Number(localStorage.getItem('chatpurge:last-delete'))) < 10e3);
     check('DELETE uses the org from the cookie', deletes().length === 2 && deletes().every((c) => c.url.startsWith(`/api/organizations/${ORG1}/chat_conversations/`)), JSON.stringify(deletes()));
     check('an unrelated 404 is a failure and the chat stays selected', say() === "Deleted 1. 1 couldn't be deleted and are still selected." && rowOf(C).classList.contains('cmd-selected'), say());
     check('A collapsed, C still visible', gone(A) && !gone(C));
