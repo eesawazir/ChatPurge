@@ -398,6 +398,23 @@
     return (cachedOrg = id);
   }
 
+  // claude.ai keeps a local ledger of the chats it has seen, as an array of
+  // { u: chat id, at: timestamp, c, p, d } entries, and treats an entry with d: 1 as deleted.
+  // Its own delete flags the entry. Our out-of-band DELETE must do the same, otherwise the
+  // sidebar keeps showing the chat after a refresh. The format is private, so only touch it
+  // if it has exactly the expected shape.
+  const LEDGER_KEY = 'claude-conversation-ledger';
+  function flagLedgerDeleted(id) {
+    try {
+      const ledger = JSON.parse(localStorage.getItem(LEDGER_KEY) || 'null');
+      if (!Array.isArray(ledger) || !ledger.every((e) => e && typeof e.u === 'string')) return;
+      const entry = ledger.find((e) => e.u === id);
+      if (!entry || entry.d) return;
+      entry.d = 1;
+      localStorage.setItem(LEDGER_KEY, JSON.stringify(ledger));
+    } catch { /* unknown format or storage unavailable: leave the app's data alone */ }
+  }
+
   async function sendDelete(id, attempt) {
     if (isClaude) {
       const org = await getOrgId();
@@ -417,9 +434,17 @@
     });
   }
 
+  // Resolves true if the chat was already gone, false if this request deleted it.
   async function hideConversation(id, attempt = 0) {
     const res = await sendDelete(id, attempt);
-    if (res.ok) return;
+    if (res.ok) return false;
+    // claude.ai: a specific "no such conversation" error means it is already deleted
+    // (e.g. a stale sidebar row). Any other 404 stays a failure, so a changed endpoint
+    // can't make every chat look deleted.
+    if (isClaude && res.status === 404) {
+      const body = await res.clone().json().catch(() => null);
+      if (body?.error?.error_code === 'chat_conversation_not_found') return true;
+    }
     if ((res.status === 429 || res.status >= 500) && attempt < 3) {
       await sleep(1500 * 2 ** attempt); // back off: 1.5s, 3s, 6s
       return hideConversation(id, attempt + 1);
@@ -440,12 +465,14 @@
     let deleted = 0;
     let stoppedEarly = null;
     let gapsLeft = false;
+    let alreadyGone = 0;
 
     for (let i = 0; i < ids.length; i++) {
       status(`Deleting ${i + 1} of ${ids.length}…`);
       try {
-        await hideConversation(ids[i]);
+        if (await hideConversation(ids[i])) alreadyGone++;
         deleted++;
+        if (isClaude) flagLedgerDeleted(ids[i]);
         state.selected.delete(ids[i]);
         if (!markGone(ids[i])) gapsLeft = true;
       } catch (err) {
@@ -457,15 +484,16 @@
 
     state.busy = false;
     const left = state.selected.size;
+    const note = alreadyGone ? ` (${alreadyGone} already gone)` : '';
     if (stoppedEarly) {
       status(`Deleted ${deleted}. Stopped: ${stoppedEarly}. Reload the page and try again.`);
     } else if (left) {
-      status(`Deleted ${deleted}. ${left} couldn't be deleted and are still selected.`);
+      status(`Deleted ${deleted}${note}. ${left} couldn't be deleted and are still selected.`);
     } else if (gapsLeft) {
-      status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}. Refresh to tidy the sidebar.`, 8000,
+      status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}${note}. Refresh to tidy the sidebar.`, 8000,
         { label: 'Refresh', run: () => location.reload() });
     } else {
-      status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}.`, 2000);
+      status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}${note}.`, 2000);
     }
     render();
 
