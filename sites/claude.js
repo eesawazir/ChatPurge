@@ -67,7 +67,6 @@
     rowSelector: '[data-row-key] a[href^="/chat/"], [data-row-key] a[href^="/cowork/"]',
     linkSelector: 'a[href^="/chat/"], a[href^="/cowork/"]',
     home: '/new',
-    leaveDelayMs: 1200, // lets the app save its refreshed list before the page changes
     idFromPath(path) {
       const m = path.match(ITEM_PATH);
       return m ? m[1] ?? m[2] ?? null : null;

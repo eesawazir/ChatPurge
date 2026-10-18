@@ -43,9 +43,11 @@
 <script src="harness.js"></script>
 <script>
   const calls = [];
+  let rejectOnce = null; // a chat whose next PATCH answers 401
   window.fetch = async (url, opts = {}) => {
     calls.push({ url, method: opts.method, body: opts.body, auth: opts.headers?.Authorization });
     if (url === '/api/auth/session') return new Response(JSON.stringify({ accessToken: 'tok' }), { status: 200 });
+    if (rejectOnce && url.endsWith(rejectOnce)) { rejectOnce = null; return new Response('{}', { status: 401 }); }
     return new Response('{}', { status: 200 });
   };
 </script>
@@ -116,11 +118,24 @@
     await waitFor(() => !panel().querySelector('.cmd-delete').hasAttribute('data-x') && !document.querySelector('.cmd-bar.cmd-busy'));
     check('busy state ends after the batch', !document.querySelector('.cmd-bar.cmd-busy') && !panel().querySelector('.cmd-all').disabled);
 
+    check('the token is fetched once for the batch', calls.filter((c) => c.url === '/api/auth/session').length === 1);
+
+    // A 401 is not retried: the token was fetched for this batch, so it can't be stale. The batch stops.
+    rejectOnce = id(3);
+    press(rows()[2]);
+    await frames2();
+    panel().querySelector('.cmd-delete').click();
+    await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy') && panel().querySelector('.cmd-announce').textContent.includes('Stopped'));
+    check('a 401 stops the batch without a retry', calls.filter((c) => c.url.endsWith(id(3))).length === 1
+      && panel().querySelector('.cmd-announce').textContent.startsWith('Deleted 0. Stopped: HTTP 401.'), panel().querySelector('.cmd-announce').textContent);
+    check('each batch fetches a fresh token', calls.filter((c) => c.url === '/api/auth/session').length === 2);
+
     // Select all, then delete: the confirmation lists 8 titles (long ones shortened) and counts the rest.
     panel().querySelector('.cmd-all').click();
     await frames2();
     panel().querySelector('.cmd-delete').click();
-    await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy') && calls.filter((c) => c.method === 'PATCH').length === 11);
+    await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy') && calls.filter((c) => c.method === 'PATCH').length === 12);
+    check('the next batch fetches its own token again', calls.filter((c) => c.url === '/api/auth/session').length === 3);
     const text = confirms.at(-1);
     const bullets = text.split('\n').filter((l) => l.startsWith('• '));
     check('long selections list 8 titles and count the rest', text.startsWith('Delete 9 chats?\n\n') && bullets.length === 8 && text.includes('\n…and 1 more\n'), text);

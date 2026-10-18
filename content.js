@@ -6,10 +6,10 @@
 //   kind(id)                    'chat' or another item name, for the confirmation
 //   findToolbarSlot()           { slot, row } beside the user's name, or null
 //   mountToolbar(slot, panel)
-//   request(id, attempt)        the delete request (a fetch Response)
+//   request(id)                 the delete request (a fetch Response)
 //   isAlreadyGone(id, res)      true if a failed response means "already deleted"
 //   isFatal(id, status)         true if the batch should stop
-// Optional: checkboxHost(link), themeColors(ref), leaveDelayMs, beforeBatch(), afterBatch().
+// Optional: checkboxHost(link), themeColors(ref), beforeBatch(), afterBatch().
 (() => {
   'use strict';
   const site = globalThis.ChatPurgeSite;
@@ -296,14 +296,13 @@
   // ---- Deleting
   // Resolves true if the chat was already gone, false if this request deleted it.
   async function deleteOne(id, attempt = 0) {
-    const res = await site.request(id, attempt);
+    const res = await site.request(id);
     if (res.ok) return false;
     if (await site.isAlreadyGone(id, res)) return true;
     if ((res.status === 429 || res.status >= 500) && attempt < 3) {
       await sleep(1500 * 2 ** attempt);
       return deleteOne(id, attempt + 1);
     }
-    if (res.status === 401 && attempt === 0) return deleteOne(id, 1);
     throw Object.assign(new Error(`HTTP ${res.status}`), { fatal: site.isFatal(id, res.status) });
   }
 
@@ -367,7 +366,6 @@
     // Stay busy until the site has refreshed its lists and any navigation has started.
     if (deleted) await site.afterBatch?.();
     if (openId && ids.includes(openId) && !state.selected.has(openId)) {
-      await sleep(site.leaveDelayMs ?? 0);
       location.assign(site.home);
     }
     state.busy = false;

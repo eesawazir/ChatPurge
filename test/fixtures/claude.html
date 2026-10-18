@@ -19,6 +19,7 @@
     <div data-row-key="b"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000b2" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat B</span></a></div></div></div>
     <div data-row-key="c"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000c3" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat C</span></a></div></div></div>
     <div data-row-key="d"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000d4" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat D</span></a></div></div></div>
+    <div data-row-key="e"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000e5" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat E</span></a></div></div></div>
     <!-- Cowork sessions, with the "Mark as unread" status button claude.ai puts in their leading slot. -->
     <div data-row-key="cowork:cse_01Ok"><div><div data-row><a href="/cowork/cse_01Ok" data-row-main-button><span class="df-leading-slot"><span role="button" aria-label="Mark as unread"><i></i></span></span><span data-row-label>Cowork OK</span></a></div></div></div>
     <div data-row-key="cowork:cse_01Denied"><div><div data-row><a href="/cowork/cse_01Denied" data-row-main-button><span class="df-leading-slot"><span role="button" aria-label="Mark as unread"><i></i></span></span><span data-row-label>Cowork denied</span></a></div></div></div>
@@ -33,6 +34,7 @@
   const ORG1 = '00000000-0000-4000-8000-0000000000f1';
   const ORG2 = '00000000-0000-4000-8000-0000000000f2';
   const A = '00000000-0000-4000-8000-0000000000a1', B = '00000000-0000-4000-8000-0000000000b2', C = '00000000-0000-4000-8000-0000000000c3';
+  const E = '00000000-0000-4000-8000-0000000000e5'; // signed out: every request answers 401
   const D = '00000000-0000-4000-8000-0000000000d4', K_OK = 'cse_01Ok', K_DENIED = 'cse_01Denied';
   document.cookie = `lastActiveOrg=${ORG1}; path=/`;
   // A delete from 10 minutes ago is too old for the bridge's catch-up refresh on load.
@@ -46,6 +48,7 @@
   window.fetch = async (url, opts = {}) => {
     calls.push({ url, method: opts.method, headers: opts.headers ?? {} });
     if (opts.method !== 'DELETE') return new Response('[]', { status: 200 });
+    if (url.endsWith(E)) return new Response('{}', { status: 401 });
     if (url.endsWith(K_DENIED)) return new Response('{"error":{"type":"permission_error"}}', { status: 403 });
     if (url.endsWith(B)) return new Response(JSON.stringify({ type: 'error', error: { type: 'not_found_error', details: { error_code: 'chat_conversation_not_found' } } }), { status: 404 });
     if (url.endsWith(C)) return cStatus === 200 ? new Response('{}', { status: 200 }) : new Response('{"error":{"error_code":"other"}}', { status: 404 });
@@ -134,6 +137,14 @@
     check('deleted Cowork row collapses, rejected one stays selected', gone(K_OK) && !gone(K_DENIED) && rowOf(K_DENIED).classList.contains('cmd-selected'));
     check('confirmation counts chats and Cowork sessions separately and labels sessions',
       confirms.at(-1) === "Delete 1 chat and 2 Cowork sessions?\n\n• Cowork denied (Cowork session)\n• Cowork OK (Cowork session)\n• Chat D\n\nThey can't be restored.", confirms.at(-1));
+    // Batch 5: a 401 on a chat means signed out. There is no token to refresh, so no retry; the batch stops.
+    press(rowOf(E));
+    await frames2();
+    panel().querySelector('.cmd-delete').click();
+    await waitFor(() => say().includes('Stopped'));
+    await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy'));
+    check('a 401 on claude.ai is not retried and stops the batch', deletes().filter((c) => c.url.endsWith(E)).length === 1
+      && say().startsWith('Deleted 0. Stopped: HTTP 401.'), say());
     check("claude.ai's ledger is still untouched after all batches", ledgerUntouched());
 
     key({ key: 'Escape' });

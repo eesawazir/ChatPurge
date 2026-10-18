@@ -3,19 +3,14 @@
   'use strict';
   const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
   const CHAT_PATH = new RegExp(`/c/(${UUID})`, 'i');
-  const TOKEN_TTL_MS = 5 * 60e3;
-  let token = null;
-  let tokenTime = 0;
+  let token = null; // fetched once per batch, on its first request
 
-  async function getToken(force) {
-    if (!force && token && Date.now() - tokenTime < TOKEN_TTL_MS) return token;
+  async function getToken() {
     const res = await fetch('/api/auth/session', { credentials: 'include' });
     if (!res.ok) throw Object.assign(new Error(`Session request failed (${res.status})`), { fatal: true });
     const json = await res.json();
     if (!json?.accessToken) throw Object.assign(new Error('Not signed in'), { fatal: true });
-    token = json.accessToken;
-    tokenTime = Date.now();
-    return token;
+    return json.accessToken;
   }
 
   // The profile row ends in a container that ChatGPT hides while it is empty ("empty:hidden").
@@ -55,12 +50,15 @@
     findToolbarSlot,
     mountToolbar: (slot, panel) => slot.append(panel),
 
-    async request(id, attempt) {
-      const auth = await getToken(attempt > 0);
+    beforeBatch() {
+      token = null;
+    },
+    async request(id) {
+      token ??= await getToken();
       return fetch(`/backend-api/conversation/${id}`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ is_visible: false }),
       });
     },
