@@ -4,14 +4,21 @@
   window.__cmdLoaded = true;
 
   // ---- Config ---------------------------------------------------------------
-  const ID_RE = /\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-  const ROW_SELECTOR = 'nav a[href*="/c/"], aside a[href*="/c/"]';
+  const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+  const isClaude = location.hostname === 'claude.ai' || location.hostname.endsWith('.claude.ai');
+  // Per-site bits: how to spot chat rows and chat IDs, and where "no chat open" lives.
+  const SITE = isClaude
+    ? { idRe: new RegExp(`/chat/(${UUID})`, 'i'), rowSelector: '[data-row-key] a[href^="/chat/"]', linkSelector: 'a[href^="/chat/"]', home: '/new' }
+    : { idRe: new RegExp(`/c/(${UUID})`, 'i'), rowSelector: 'nav a[href*="/c/"], aside a[href*="/c/"]', linkSelector: 'a[href*="/c/"]', home: '/' };
+  const ID_RE = SITE.idRe;
+  const ROW_SELECTOR = SITE.rowSelector;
   const DELAY_MS = 350;          // pause between deletions to stay under rate limits
   const TOKEN_TTL_MS = 5 * 60e3; // re-fetch the session token after 5 minutes
 
   // ---- State ----------------------------------------------------------------
   const state = { active: false, busy: false, selected: new Set(), anchorId: null };
   let cachedToken = null;
+  let cachedOrg = null; // claude.ai organization ID
   let tokenTime = 0;
   let statusTimer = null;
 
@@ -38,7 +45,26 @@
 
   // ChatGPT can render more than one profile button (e.g. a collapsed-sidebar copy), so
   // try every candidate rather than only the first match.
+  // claude.ai: the footer row is [user menu wrapper][aux icons]; the aux container
+  // (next to the wrapper around the user-menu button) is where the buttons go.
+  function findClaudeSlot() {
+    let hidden = null;
+    for (const btn of document.querySelectorAll('button[data-testid="user-menu-button"]')) {
+      let el = btn.parentElement;
+      for (let depth = 0; el && el !== document.body && depth < 2; depth++, el = el.parentElement) {
+        const slot = el.nextElementSibling;
+        if (!slot || !el.parentElement || !slot.querySelector('button, a')) continue;
+        const found = { slot, row: el.parentElement };
+        if (found.row.getClientRects().length) return found;
+        hidden ??= found;
+        break;
+      }
+    }
+    return hidden;
+  }
+
   function findProfileSlot() {
+    if (isClaude) return findClaudeSlot();
     let buttons = [...document.querySelectorAll(PROFILE_BTN)];
     if (!buttons.length) {
       // Non-English UI translates the aria-label; fall back to the menu
@@ -76,7 +102,10 @@
     if (!state.active) { panel.remove(); return; }
     const r = profileSlot?.isConnected && profileRow?.isConnected ? profileRow.getBoundingClientRect() : null;
     if (r && r.width > 120 && r.height > 0) {
-      if (panel.parentElement !== profileSlot) profileSlot.append(panel);
+      if (panel.parentElement !== profileSlot) {
+        if (isClaude) profileSlot.prepend(panel); // keep the site's own icons at the far right
+        else profileSlot.append(panel);
+      }
       ui.classList.remove('cmd-floating');
       ui.classList.add('cmd-docked');
       ui.style.left = `${Math.round(r.left)}px`;
@@ -94,6 +123,25 @@
         ui.style.right = `${Math.round(innerWidth - nr.right + 12)}px`;
       }
     }
+    syncTheme();
+  }
+
+  // claude.ai doesn't expose the theme variables used on ChatGPT, so copy the
+  // sidebar's own text and background colours (this also follows light/dark).
+  function syncTheme() {
+    if (!isClaude) return;
+    const ref = profileRow?.isConnected ? profileRow : rows()[0] ?? document.body;
+    const fg = getComputedStyle(ref).color;
+    let bg = null;
+    for (let el = ref; el; el = el.parentElement) {
+      const c = getComputedStyle(el).backgroundColor;
+      if (c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') { bg = c; break; }
+    }
+    for (const el of [panel, ui]) {
+      el.style.setProperty('--cmd-fg', fg);
+      if (bg) el.style.setProperty('--cmd-bg', bg);
+    }
+    document.documentElement.style.setProperty('--cmd-tick', bg ?? '#fff');
   }
   addEventListener('resize', () => placeToolbar());
 
@@ -195,11 +243,17 @@
     if (!state.active) return;
     for (const a of rows()) {
       a.classList.add('cmd-row');
-      if (!a.querySelector(':scope > .cmd-check')) {
+      // claude.ai rows already have a leading slot (the status dot): swap the dot for the
+      // checkbox there. Elsewhere the box is absolutely positioned in left padding we add.
+      const host = isClaude ? a.querySelector(':scope > .df-leading-slot') : null;
+      if (host) host.classList.add('cmd-slot-host');
+      else a.classList.add('cmd-pad');
+      const parent = host ?? a;
+      if (!parent.querySelector(':scope > .cmd-check')) {
         const box = document.createElement('span');
-        box.className = 'cmd-check';
+        box.className = host ? 'cmd-check cmd-in-slot' : 'cmd-check';
         box.setAttribute('aria-hidden', 'true');
-        a.append(box); // append (not prepend) is gentler on React's reconciliation
+        parent.append(box); // append (not prepend) is gentler on React's reconciliation
       }
       const on = state.selected.has(idOf(a));
       a.classList.toggle('cmd-selected', on);
@@ -209,10 +263,11 @@
 
   function undecorate() {
     document.querySelectorAll('a.cmd-row').forEach((a) => {
-      a.classList.remove('cmd-row', 'cmd-selected');
+      a.classList.remove('cmd-row', 'cmd-selected', 'cmd-pad');
       a.removeAttribute('aria-checked');
-      a.querySelector(':scope > .cmd-check')?.remove();
+      a.querySelectorAll('.cmd-check').forEach((box) => box.remove());
     });
+    document.querySelectorAll('.cmd-slot-host').forEach((el) => el.classList.remove('cmd-slot-host'));
   }
 
   // Walk up from the link to the outermost wrapper that holds only this one chat,
@@ -222,7 +277,7 @@
     while (el.parentElement && el.parentElement !== document.body) {
       const p = el.parentElement;
       if (p.matches('nav, aside, ol, ul, [role="list"]')) break;
-      if (p.querySelectorAll('a[href*="/c/"]').length !== 1) break;
+      if (p.querySelectorAll(SITE.linkSelector).length !== 1) break;
       if (p.querySelector('h1, h2, h3, h4, h5, h6')) break; // don't hide section headings
       el = p;
     }
@@ -316,7 +371,7 @@
     });
   }).observe(document.body, { childList: true, subtree: true });
 
-  // ---- ChatGPT web API (same calls the site makes; unofficial) -------------
+  // ---- Web APIs (same calls the sites make; unofficial) --------------------
   async function getToken(force = false) {
     if (!force && cachedToken && Date.now() - tokenTime < TOKEN_TTL_MS) return cachedToken;
     const res = await fetch('/api/auth/session', { credentials: 'include' });
@@ -328,14 +383,42 @@
     return cachedToken;
   }
 
-  async function hideConversation(id, attempt = 0) {
+  // claude.ai: calls are scoped to an organization and authenticated by the session cookie.
+  async function getOrgId() {
+    if (cachedOrg) return cachedOrg;
+    const uuid = new RegExp(`^${UUID}$`, 'i');
+    let id = decodeURIComponent(document.cookie.match(/(?:^|;\s*)lastActiveOrg=([^;]+)/)?.[1] ?? '');
+    if (!uuid.test(id)) {
+      const res = await fetch('/api/organizations', { credentials: 'include' });
+      if (!res.ok) throw Object.assign(new Error(`Organization request failed (${res.status})`), { fatal: true });
+      const orgs = await res.json();
+      id = (orgs.find?.((o) => o.capabilities?.includes?.('chat')) ?? orgs[0])?.uuid ?? '';
+    }
+    if (!uuid.test(id)) throw Object.assign(new Error('Could not find your organization'), { fatal: true });
+    return (cachedOrg = id);
+  }
+
+  async function sendDelete(id, attempt) {
+    if (isClaude) {
+      const org = await getOrgId();
+      return fetch(`/api/organizations/${org}/chat_conversations/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+    }
     const token = await getToken(attempt > 0);
-    const res = await fetch(`/backend-api/conversation/${id}`, {
+    return fetch(`/backend-api/conversation/${id}`, {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ is_visible: false }),
     });
+  }
+
+  async function hideConversation(id, attempt = 0) {
+    const res = await sendDelete(id, attempt);
     if (res.ok) return;
     if ((res.status === 429 || res.status >= 500) && attempt < 3) {
       await sleep(1500 * 2 ** attempt); // back off: 1.5s, 3s, 6s
@@ -386,7 +469,7 @@
     }
     render();
 
-    if (openId && ids.includes(openId) && !state.selected.has(openId)) location.assign('/');
+    if (openId && ids.includes(openId) && !state.selected.has(openId)) location.assign(SITE.home);
   }
 
   // ---- Toolbar icon messages ----------------------------------------------

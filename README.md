@@ -4,7 +4,7 @@
 </h1>
 
 <p align="center">
-  Tick a bunch of chats in the ChatGPT sidebar. Delete them all in one go.
+  Tick a bunch of chats in the ChatGPT or Claude sidebar. Delete them all in one go.
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
 
 ## ✨ What it does
 
-Deleting ChatGPT chats one at a time is slow. ChatPurge adds checkboxes to the sidebar so you can clear out dozens in one go.
+Deleting chats one at a time is slow. ChatPurge adds checkboxes to the ChatGPT and Claude sidebars so you can clear out dozens in one go.
 
 - ☑️ **Tick chats** by clicking them, or **Shift+click** to grab a whole range
 - 🧹 **Select all** the chats currently loaded in the sidebar
@@ -41,7 +41,7 @@ Deleting ChatGPT chats one at a time is slow. ChatPurge adds checkboxes to the s
 1. Download this repository as a ZIP and extract it.
 2. Open `chrome://extensions` and turn on **Developer mode** (top right).
 3. Click **Load unpacked** and pick the `ChatPurge` folder.
-4. Open or reload https://chatgpt.com.
+4. Open or reload https://chatgpt.com or https://claude.ai.
 
 ## 🕹️ Use
 
@@ -65,20 +65,18 @@ Progress messages appear just above the profile row.
 
 ## ⚙️ How it works
 
-It calls the same endpoint the ChatGPT website uses when you delete a chat:
-`PATCH /backend-api/conversation/{id}` with `{"is_visible": false}`, authorised with the
-token from `/api/auth/session`. Requests are same-origin; nothing is sent anywhere else.
-Deletions are spaced 350 ms apart and retried with backoff if ChatGPT pushes back.
+It calls the same endpoints the websites use when you delete a chat. Requests are same-origin; nothing is sent anywhere else.
+
+- **ChatGPT:** `PATCH /backend-api/conversation/{id}` with `{"is_visible": false}`, authorised with the token from `/api/auth/session`.
+- **Claude:** `DELETE /api/organizations/{org}/chat_conversations/{id}`, authorised by your signed-in session cookie.
+
+Deletions are spaced 350 ms apart and retried with backoff if the site pushes back.
 
 No build step, no dependencies, no extra permissions.
 
 ## ⚠️ Caveats
 
-- This is an unofficial, undocumented API. OpenAI can change it or the sidebar markup at
-  any time, which would break the extension.
+- These are unofficial, undocumented APIs. OpenAI or Anthropic can change them or the sidebar
+  markup at any time, which would break the extension.
 - **Deleted chats cannot be restored.** Try it on a throwaway chat first.
-- After a large batch, reload the page so ChatGPT's own sidebar cache catches up.
-
-## 🔭 What's next
-
-- 🔜 **claude.ai support**
+- After a large batch, reload the page so the site's own sidebar cache catches up.
