@@ -16,7 +16,6 @@ html.dark .cmd-bar {
   --cmd-fg: var(--text-primary, #ececec);
   --cmd-muted: var(--text-secondary, #b4b4b4);
   --cmd-line: var(--border-medium, rgba(255, 255, 255, 0.15));
-  --cmd-danger: #f0564b;
 }
 
 /* ---------- Status strip / floating fallback ---------- */
@@ -105,7 +104,8 @@ html.dark .cmd-bar {
 .cmd-del-n:empty { display: none; }
 /* Trim the number's line box to the digit height so it centres on the icon whatever the font. */
 .cmd-del-n { text-box: trim-both cap alphabetic; }
-.cmd-delete:hover:not(:disabled) { background: var(--cmd-danger); filter: brightness(1.08); }
+/* Darken on hover: lightening the red would push the white label below 4.5:1 contrast. */
+.cmd-delete:hover:not(:disabled) { background: var(--cmd-danger); filter: brightness(0.92); }
 
 .cmd-sr {
   position: absolute;

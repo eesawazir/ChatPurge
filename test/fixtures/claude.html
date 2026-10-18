@@ -1,0 +1,112 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ChatPurge fixture: Claude</title>
+<link rel="stylesheet" href="/src/styles.css">
+<style>
+  body { margin: 0; font: 14px system-ui; background: #f5f4ed; color: #222; }
+  #root { display: flex; width: 300px; height: 500px; }
+  .side { display: flex; flex-direction: column; width: 300px; }
+  .list { flex: 1; overflow: auto; }
+  .row a { display: flex; align-items: center; gap: 8px; padding: 8px 12px; color: inherit; text-decoration: none; }
+  .df-leading-slot { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; }
+  .df-leading-slot i { width: 6px; height: 6px; border-radius: 50%; background: #c96442; }
+  .df-footer-row { display: flex; align-items: center; height: 56px; padding: 0 12px; }
+  .df-footer-aux { display: flex; gap: 4px; }
+</style>
+<div id="root"><div class="side">
+  <div class="list">
+    <div data-row-key="a"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000a1" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat A</span></a></div></div></div>
+    <div data-row-key="b"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000b2" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat B</span></a></div></div></div>
+    <div data-row-key="c"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000c3" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat C</span></a></div></div></div>
+  </div>
+  <div class="df-footer-row">
+    <div class="min-w-0 flex-1"><button data-testid="user-menu-button">User</button></div>
+    <div class="df-footer-aux"><a href="/apps">Apps</a><button>Search</button></div>
+  </div>
+</div></div>
+<script src="harness.js"></script>
+<script>
+  const ORG1 = '00000000-0000-4000-8000-0000000000f1';
+  const ORG2 = '00000000-0000-4000-8000-0000000000f2';
+  const A = '00000000-0000-4000-8000-0000000000a1', B = '00000000-0000-4000-8000-0000000000b2', C = '00000000-0000-4000-8000-0000000000c3';
+  document.cookie = `lastActiveOrg=${ORG1}; path=/`;
+  localStorage.setItem('claude-conversation-ledger', JSON.stringify([A, B, C].map((u) => ({ u, at: 1, c: 0, p: 0 }))));
+
+  const calls = [];
+  let cStatus = 404; // chat C: an unrelated 404, which must count as a failure
+  window.fetch = async (url, opts = {}) => {
+    calls.push({ url, method: opts.method });
+    if (opts.method !== 'DELETE') return new Response('[]', { status: 200 });
+    if (url.endsWith(B)) return new Response(JSON.stringify({ type: 'error', error: { type: 'not_found_error', details: { error_code: 'chat_conversation_not_found' } } }), { status: 404 });
+    if (url.endsWith(C)) return cStatus === 200 ? new Response('{}', { status: 200 }) : new Response('{"error":{"error_code":"other"}}', { status: 404 });
+    return new Response('{}', { status: 200 });
+  };
+
+  // Stand-in for the app's React Query client, found by claude-bridge.js through React's fiber tree.
+  const invalidations = [];
+  document.getElementById('root').__reactContainer$test = {
+    memoizedProps: {}, child: { memoizedProps: { client: { invalidateQueries: (o) => { invalidations.push(o); return Promise.resolve(); } } } },
+  };
+</script>
+<script src="/src/claude-bridge.js"></script>
+<script src="/src/content.js"></script>
+<script>
+(async () => {
+  try {
+    const rows = () => [...document.querySelectorAll('[data-row-key] a[href^="/chat/"]')];
+    const panel = () => document.querySelector('.cmd-panel');
+    const ledger = () => JSON.parse(localStorage.getItem('claude-conversation-ledger'));
+    const deletes = () => calls.filter((c) => c.method === 'DELETE');
+
+    await frames2();
+    check('idle: nothing injected', !panel() && !document.querySelector('.cmd-check'));
+
+    key({ altKey: true, shiftKey: true, code: 'KeyD' });
+    await frames2();
+    const aux = document.querySelector('.df-footer-aux');
+    check('toolbar is prepended in the footer aux slot', panel()?.parentElement === aux && aux.firstElementChild === panel());
+    check('checkbox replaces the status dot in the leading slot', rows().every((a) => a.querySelector(':scope > .df-leading-slot > .cmd-check') && !a.classList.contains('cmd-pad')));
+    check('count live region is rendered (not display:none)', panel().querySelector('.cmd-count').checkVisibility());
+
+    const gone = (u) => getComputedStyle(document.querySelector(`a[href="/chat/${u}"]`).closest('[data-row-key]')).display === 'none';
+    const say = () => panel().querySelector('.cmd-announce').textContent;
+    const rowOf = (u) => document.querySelector(`a[href="/chat/${u}"]`);
+
+    // Batch 1: A deletes, C fails with an unrelated 404 and must stay selected.
+    press(rowOf(A)); press(rowOf(C));
+    await frames2();
+    panel().querySelector('.cmd-delete').click();
+    await waitFor(() => say().includes("couldn't be deleted"));
+    check('DELETE uses the org from the cookie', deletes().length === 2 && deletes().every((c) => c.url.startsWith(`/api/organizations/${ORG1}/chat_conversations/`)), JSON.stringify(deletes()));
+    check('an unrelated 404 is a failure and the chat stays selected', say() === "Deleted 1. 1 couldn't be deleted and are still selected." && rowOf(C).classList.contains('cmd-selected'), say());
+    check('A collapsed, C still visible', gone(A) && !gone(C));
+    check('ledger flags the deleted chat only', ledger().find((e) => e.u === A).d === 1 && !ledger().find((e) => e.u === C).d);
+    await waitFor(() => invalidations.length > 0);
+    const pred = invalidations[0]?.predicate;
+    check('bridge invalidates the chat list queries only', !!pred && pred({ queryKey: ['chat_conversation_list', {}] }) && !pred({ queryKey: ['other'] }));
+    await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy'));
+    check('busy state ends after the batch', !document.querySelector('.cmd-bar.cmd-busy') && !panel().querySelector('.cmd-all').disabled);
+
+    // Batch 2: the org is read from the cookie on every batch, so a changed cookie is picked up.
+    document.cookie = `lastActiveOrg=${ORG2}; path=/`;
+    cStatus = 200;
+    panel().querySelector('.cmd-delete').click();
+    await waitFor(() => deletes().length === 3);
+    check('a changed org cookie is used for the next batch', deletes()[2]?.url === `/api/organizations/${ORG2}/chat_conversations/${C}`, deletes()[2]?.url);
+    await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy'));
+
+    // Batch 3: the server's documented "conversation not found" body means the chat is already gone.
+    press(rowOf(B));
+    await frames2();
+    panel().querySelector('.cmd-delete').click();
+    await waitFor(() => say().startsWith('Deleted') && deletes().length === 4);
+    await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy'));
+    check('"conversation not found" counts as already gone', say() === 'Deleted 1 chat (1 already gone).' && gone(B) && ledger().find((e) => e.u === B).d === 1, say());
+
+    key({ key: 'Escape' });
+    await waitFor(() => !panel());
+    check('Esc leaves selection mode', !panel() && !document.querySelector('.cmd-check, .cmd-slot-host'));
+  } catch (e) { finish(e); return; }
+  finish();
+})();
+</script>

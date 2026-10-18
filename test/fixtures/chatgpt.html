@@ -1,0 +1,114 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ChatPurge fixture: ChatGPT</title>
+<link rel="stylesheet" href="/src/styles.css">
+<style>
+  body { margin: 0; font: 14px system-ui; }
+  nav { width: 300px; height: 500px; display: flex; flex-direction: column; background: #f9f9f9; }
+  .list { flex: 1; overflow: auto; }
+  .row { display: flex; align-items: center; }
+  .row a { flex: 1; padding: 8px 12px; color: inherit; text-decoration: none; }
+  .profile { display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 12px; }
+  .empty\:hidden:empty { display: none; }
+</style>
+<!-- A hidden duplicate profile button comes first, like the collapsed-sidebar copy on ChatGPT. -->
+<div hidden><button aria-label="Open profile menu">decoy</button></div>
+<nav>
+  <div class="list">
+    <h2>Today</h2>
+    <ol>
+      <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000001">Chat 1</a><button>...</button></div></li>
+      <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000002">Chat 2</a><button>...</button></div></li>
+      <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000003">Chat 3</a><button>...</button></div></li>
+      <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000004">Chat 4</a><button>...</button></div></li>
+      <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000005" role="menuitem">Chat 5</a><button>...</button></div></li>
+    </ol>
+  </div>
+  <div class="profile">
+    <div class="min-w-0 flex-1"><button aria-label="Open profile menu">User</button></div>
+    <div class="flex items-center empty:hidden gap-1 empty\:hidden"></div>
+  </div>
+</nav>
+<script src="harness.js"></script>
+<script>
+  const calls = [];
+  window.fetch = async (url, opts = {}) => {
+    calls.push({ url, method: opts.method, body: opts.body, auth: opts.headers?.Authorization });
+    if (url === '/api/auth/session') return new Response(JSON.stringify({ accessToken: 'tok' }), { status: 200 });
+    return new Response('{}', { status: 200 });
+  };
+</script>
+<script src="/src/content.js"></script>
+<script>
+(async () => {
+  try {
+    const rows = () => [...document.querySelectorAll('nav a[href*="/c/"]')];
+    const id = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+    const panel = () => document.querySelector('.cmd-panel');
+
+    await frames2();
+    check('idle: no toolbar, checkboxes or roles', !panel() && !document.querySelector('.cmd-check, [data-cmd-role]'));
+
+    key({ altKey: true, shiftKey: true, code: 'KeyD', repeat: true });
+    await frames2();
+    check('held shortcut (key repeat) does not toggle', !panel());
+
+    key({ altKey: true, shiftKey: true, code: 'KeyD' });
+    await frames2();
+    const slot = document.querySelector('.profile .empty\\:hidden');
+    check('toolbar docks in the profile row slot despite a hidden decoy', panel()?.parentElement === slot);
+    check('rows get checkboxes and the checkbox role', rows().every((a) => a.querySelector('.cmd-check') && a.getAttribute('role') === 'checkbox'));
+    check('count live region is rendered (not display:none)', panel().querySelector('.cmd-count').checkVisibility());
+    check('toolbar uses role=group', panel().getAttribute('role') === 'group');
+
+    press(rows()[0]);
+    press(rows()[1]);
+    await frames2();
+    check('clicking toggles rows', rows()[0].classList.contains('cmd-selected') && rows()[1].classList.contains('cmd-selected'));
+    check('count and delete label update', panel().querySelector('.cmd-count').textContent === '2 selected'
+      && panel().querySelector('.cmd-delete').getAttribute('aria-label') === 'Delete 2 chats');
+    press(rows()[3], { shiftKey: true });
+    check('shift+click selects the range', rows().slice(1, 4).every((a) => a.classList.contains('cmd-selected')));
+    check('aria-checked reflects selection', rows()[2].getAttribute('aria-checked') === 'true' && rows()[4].getAttribute('aria-checked') === 'false');
+
+    const aux = new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 });
+    rows()[4].dispatchEvent(aux);
+    check('middle-click on a row is swallowed', aux.defaultPrevented);
+
+    panel().querySelector('.cmd-all').click();
+    await frames2();
+    check('select all selects every row', rows().every((a) => a.classList.contains('cmd-selected')));
+    panel().querySelector('.cmd-all').click();
+    await frames2();
+    check('select all again clears', rows().every((a) => !a.classList.contains('cmd-selected')));
+
+    press(rows()[0]); press(rows()[1]);
+    await frames2();
+    panel().querySelector('.cmd-delete').click();
+    await frames2();
+    check('buttons are disabled while deleting', panel().querySelector('.cmd-delete').disabled && panel().querySelector('.cmd-done').disabled);
+    await waitFor(() => panel().querySelector('.cmd-announce').textContent.startsWith('Deleted'));
+    const patches = calls.filter((c) => c.method === 'PATCH');
+    check('sends one PATCH per chat with the token', patches.length === 2
+      && patches.every((c) => c.body === '{"is_visible":false}' && c.auth === 'Bearer tok'), JSON.stringify(patches));
+    check('PATCH targets the chat ids', patches[0]?.url === `/backend-api/conversation/${id(1)}` && patches[1]?.url === `/backend-api/conversation/${id(2)}`);
+    const gone = (a) => getComputedStyle(a.closest('li')).display === 'none';
+    check('deleted rows collapse, including their wrapper', gone(rows()[0]) || gone(document.querySelector(`a[href="/c/${id(1)}"]`)));
+    check('section heading stays visible', getComputedStyle(document.querySelector('h2')).display !== 'none');
+    check('completion is announced in the always-rendered live region', panel().querySelector('.cmd-announce').textContent === 'Deleted 2 chats.');
+    await waitFor(() => !panel().querySelector('.cmd-delete').hasAttribute('data-x') && !document.querySelector('.cmd-bar.cmd-busy'));
+    check('busy state ends after the batch', !document.querySelector('.cmd-bar.cmd-busy') && !panel().querySelector('.cmd-all').disabled);
+
+    key({ key: 'Escape' });
+    await frames2();
+    check('Esc leaves selection mode and removes the toolbar', !panel() && !document.querySelector('.cmd-check'));
+    check('roles are restored (site role kept, none added)', document.querySelector(`a[href="/c/${id(5)}"]`).getAttribute('role') === 'menuitem'
+      && !document.querySelector('[data-cmd-role], a[role="checkbox"]'));
+
+    document.querySelector('ol').append(document.createElement('li'));
+    await frames2();
+    check('idle mutations do not bring the toolbar back', !panel());
+  } catch (e) { finish(e); return; }
+  finish();
+})();
+</script>

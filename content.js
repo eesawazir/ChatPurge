@@ -5,13 +5,11 @@
 
   // ---- Config ---------------------------------------------------------------
   const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-  const isClaude = location.hostname === 'claude.ai' || location.hostname.endsWith('.claude.ai');
+  const isClaude = location.hostname === 'claude.ai';
   // Per-site bits: how to spot chat rows and chat IDs, and where "no chat open" lives.
   const SITE = isClaude
     ? { idRe: new RegExp(`/chat/(${UUID})`, 'i'), rowSelector: '[data-row-key] a[href^="/chat/"]', linkSelector: 'a[href^="/chat/"]', home: '/new' }
     : { idRe: new RegExp(`/c/(${UUID})`, 'i'), rowSelector: 'nav a[href*="/c/"], aside a[href*="/c/"]', linkSelector: 'a[href*="/c/"]', home: '/' };
-  const ID_RE = SITE.idRe;
-  const ROW_SELECTOR = SITE.rowSelector;
   const DELAY_MS = 350;          // pause between deletions to stay under rate limits
   const TOKEN_TTL_MS = 5 * 60e3; // re-fetch the session token after 5 minutes
 
@@ -23,9 +21,9 @@
   let statusTimer = null;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const idOf = (a) => (a.getAttribute('href') || '').match(ID_RE)?.[1] ?? null;
+  const idOf = (a) => (a.getAttribute('href') || '').match(SITE.idRe)?.[1] ?? null;
   const rows = () =>
-    [...document.querySelectorAll(ROW_SELECTOR)].filter((a) => idOf(a) && !a.closest('.cmd-gone'));
+    [...document.querySelectorAll(SITE.rowSelector)].filter((a) => idOf(a) && !a.closest('.cmd-gone'));
 
   // ---- Profile row slot ----------------------------------------------------
   // The profile row has a trailing container (class "empty:hidden") that
@@ -43,8 +41,6 @@
     return null;
   }
 
-  // ChatGPT can render more than one profile button (e.g. a collapsed-sidebar copy), so
-  // try every candidate rather than only the first match.
   // claude.ai: the footer row is [user menu wrapper][aux icons]; the aux container
   // (next to the wrapper around the user-menu button) is where the buttons go.
   function findClaudeSlot() {
@@ -63,6 +59,8 @@
     return hidden;
   }
 
+  // ChatGPT can render more than one profile button (e.g. a collapsed-sidebar copy), so
+  // try every candidate rather than only the first match.
   function findProfileSlot() {
     if (isClaude) return findClaudeSlot();
     let buttons = [...document.querySelectorAll(PROFILE_BTN)];
@@ -145,11 +143,11 @@
   }
   addEventListener('resize', () => placeToolbar());
 
-  // ---- Toolbar (opened from the profile-row button, extension icon, or Alt+Shift+D)
+  // ---- Toolbar (opened from the extension icon or Alt+Shift+D)
   const SVG = 'viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
   const panel = document.createElement('div');
   panel.className = 'cmd-panel';
-  panel.setAttribute('role', 'toolbar');
+  panel.setAttribute('role', 'group');
   panel.setAttribute('aria-label', 'Chat selection');
   panel.innerHTML = `
     <button type="button" class="cmd-btn cmd-icon cmd-all" aria-label="Select all chats" title="Select all chats">
@@ -165,29 +163,37 @@
     </button>
     <button type="button" class="cmd-btn cmd-icon cmd-done" aria-label="Done" title="Done (Esc)">
       <svg ${SVG}><path d="M6 6l12 12M18 6L6 18"/></svg>
-    </button>`;
+    </button>
+    <span class="cmd-sr cmd-count" role="status"></span>
+    <span class="cmd-sr cmd-announce" role="status"></span>`;
 
   const ui = document.createElement('div');
   ui.className = 'cmd-bar cmd-floating';
-  ui.innerHTML = `
-    <span class="cmd-sr cmd-count" aria-live="polite"></span>
-    <div class="cmd-status" role="status" aria-live="polite"></div>`;
+  ui.innerHTML = '<div class="cmd-status"></div>';
   const $ = (sel) => panel.querySelector(sel) ?? ui.querySelector(sel);
 
   $('.cmd-done').addEventListener('click', () => setActive(false));
   $('.cmd-delete').addEventListener('click', deleteSelected);
   $('.cmd-all').addEventListener('click', () => {
-    const ids = rows().map(idOf);
-    const allSelected = ids.length && ids.every((id) => state.selected.has(id));
-    if (allSelected) state.selected.clear();
+    const { ids, all } = rowSelection();
+    if (all) state.selected.clear();
     else ids.forEach((id) => state.selected.add(id));
     render();
   });
+
+  // The chat ids currently in the sidebar, and whether every one of them is selected.
+  function rowSelection() {
+    const ids = rows().map(idOf);
+    return { ids, all: ids.length > 0 && ids.every((id) => state.selected.has(id)) };
+  }
 
   function status(msg, autoClearMs = 0, action = null) {
     clearTimeout(statusTimer);
     const el = $('.cmd-status');
     el.textContent = msg;
+    // The visible strip is display:none while docked and idle, which hides it from screen readers,
+    // so the message is mirrored into a live region that is always rendered with the buttons.
+    $('.cmd-announce').textContent = msg;
     ui.classList.toggle('cmd-has-status', !!msg);
     if (action) {
       const btn = document.createElement('button');
@@ -208,6 +214,7 @@
   function setActive(on) {
     if (state.busy) return;
     state.active = on;
+    if (on) trackProfileRow(); // idle pages are not tracked (see the observer below)
     if (!on) {
       state.selected.clear();
       state.anchorId = null;
@@ -229,8 +236,7 @@
     $('.cmd-delete').disabled = n === 0 || state.busy;
     $('.cmd-all').disabled = state.busy;
     $('.cmd-done').disabled = state.busy;
-    const ids = rows().map(idOf);
-    const allSelected = ids.length > 0 && ids.every((id) => state.selected.has(id));
+    const allSelected = rowSelection().all;
     const allLabel = allSelected ? 'Clear selection' : 'Select all chats';
     $('.cmd-all').classList.toggle('cmd-all-on', allSelected);
     $('.cmd-all').setAttribute('aria-label', allLabel);
@@ -256,6 +262,10 @@
         parent.append(box); // append (not prepend) is gentler on React's reconciliation
       }
       const on = state.selected.has(idOf(a));
+      if (!a.hasAttribute('data-cmd-role')) { // remember any role the site gave the link
+        a.setAttribute('data-cmd-role', a.getAttribute('role') ?? '');
+        a.setAttribute('role', 'checkbox');
+      }
       a.classList.toggle('cmd-selected', on);
       a.setAttribute('aria-checked', String(on));
     }
@@ -265,6 +275,11 @@
     document.querySelectorAll('a.cmd-row').forEach((a) => {
       a.classList.remove('cmd-row', 'cmd-selected', 'cmd-pad');
       a.removeAttribute('aria-checked');
+      const role = a.getAttribute('data-cmd-role');
+      if (role !== null) {
+        if (role) a.setAttribute('role', role); else a.removeAttribute('role');
+        a.removeAttribute('data-cmd-role');
+      }
       a.querySelectorAll('.cmd-check').forEach((box) => box.remove());
     });
     document.querySelectorAll('.cmd-slot-host').forEach((el) => el.classList.remove('cmd-slot-host'));
@@ -288,7 +303,7 @@
   // (e.g. a virtualised list that positions rows with fixed offsets).
   function markGone(id) {
     let collapsed = true;
-    document.querySelectorAll(ROW_SELECTOR).forEach((a) => {
+    document.querySelectorAll(SITE.rowSelector).forEach((a) => {
       if (idOf(a) !== id) return;
       const list = rows();
       const next = list[list.indexOf(a) + 1];
@@ -312,6 +327,7 @@
   };
   document.addEventListener('pointerdown', swallow, true);
   document.addEventListener('mousedown', swallow, true);
+  document.addEventListener('auxclick', swallow, true); // middle-click would open the chat in a new tab
 
   document.addEventListener('click', (e) => {
     if (!state.active) return;
@@ -346,7 +362,7 @@
   document.addEventListener('keydown', (e) => {
     if (e.altKey && e.shiftKey && e.code === 'KeyD') {
       e.preventDefault();
-      setActive(!state.active);
+      if (!e.repeat) setActive(!state.active); // holding the keys must not flip the mode repeatedly
     } else if (e.key === 'Escape' && state.active && !state.busy) {
       setActive(false);
     }
@@ -356,6 +372,7 @@
   let queued = false;
   let mountQueued = false;
   new MutationObserver(() => {
+    if (!state.active) return; // nothing to keep in place while idle
     if (!mountQueued) {
       mountQueued = true;
       requestAnimationFrame(() => {
@@ -363,7 +380,7 @@
         trackProfileRow(); // React re-renders the footer; keep the slot reference fresh
       });
     }
-    if (!state.active || queued) return;
+    if (queued) return;
     queued = true;
     requestAnimationFrame(() => {
       queued = false;
@@ -385,15 +402,15 @@
 
   // claude.ai: calls are scoped to an organization and authenticated by the session cookie.
   async function getOrgId() {
-    if (cachedOrg) return cachedOrg;
     const uuid = new RegExp(`^${UUID}$`, 'i');
-    let id = decodeURIComponent(document.cookie.match(/(?:^|;\s*)lastActiveOrg=([^;]+)/)?.[1] ?? '');
-    if (!uuid.test(id)) {
-      const res = await fetch('/api/organizations', { credentials: 'include' });
-      if (!res.ok) throw Object.assign(new Error(`Organization request failed (${res.status})`), { fatal: true });
-      const orgs = await res.json();
-      id = (orgs.find?.((o) => o.capabilities?.includes?.('chat')) ?? orgs[0])?.uuid ?? '';
-    }
+    let id = '';
+    try { id = decodeURIComponent(document.cookie.match(/(?:^|;\s*)lastActiveOrg=([^;]+)/)?.[1] ?? ''); } catch { /* malformed cookie: use the API */ }
+    if (uuid.test(id)) return id;
+    if (cachedOrg) return cachedOrg;
+    const res = await fetch('/api/organizations', { credentials: 'include' });
+    if (!res.ok) throw Object.assign(new Error(`Organization request failed (${res.status})`), { fatal: true });
+    const orgs = await res.json();
+    id = (orgs.find?.((o) => o.capabilities?.includes?.('chat')) ?? orgs[0])?.uuid ?? '';
     if (!uuid.test(id)) throw Object.assign(new Error('Could not find your organization'), { fatal: true });
     return (cachedOrg = id);
   }
@@ -456,7 +473,8 @@
     // can't make every chat look deleted.
     if (isClaude && res.status === 404) {
       const body = await res.clone().json().catch(() => null);
-      if (body?.error?.error_code === 'chat_conversation_not_found') return true;
+      const code = body?.error?.details?.error_code ?? body?.error?.error_code;
+      if (code === 'chat_conversation_not_found') return true;
     }
     if ((res.status === 429 || res.status >= 500) && attempt < 3) {
       await sleep(1500 * 2 ** attempt); // back off: 1.5s, 3s, 6s
@@ -474,7 +492,7 @@
 
     state.busy = true;
     render();
-    const openId = location.pathname.match(ID_RE)?.[1];
+    const openId = location.pathname.match(SITE.idRe)?.[1];
     let deleted = 0;
     let stoppedEarly = null;
     let gapsLeft = false;
@@ -495,7 +513,6 @@
       if (i < ids.length - 1) await sleep(DELAY_MS);
     }
 
-    state.busy = false;
     const left = state.selected.size;
     const note = alreadyGone ? ` (${alreadyGone} already gone)` : '';
     if (stoppedEarly) {
@@ -508,13 +525,15 @@
     } else {
       status(`Deleted ${deleted} ${deleted === 1 ? 'chat' : 'chats'}${note}.`, 2000);
     }
-    render();
+    render(); // still busy: the buttons stay disabled until the refresh and any navigation are done
 
     if (deleted) await refreshSiteLists();
     if (openId && ids.includes(openId) && !state.selected.has(openId)) {
       if (isClaude) await sleep(1200); // let the app persist its refreshed list before we leave the page
       location.assign(SITE.home);
     }
+    state.busy = false;
+    render();
   }
 
   // ---- Toolbar icon messages ----------------------------------------------
@@ -523,6 +542,5 @@
   });
 
   document.body.append(ui);
-  trackProfileRow();
   render();
 })();
