@@ -96,7 +96,7 @@ html.dark .cmd-bar {
 /* Trims the digits' line box so the count centres on the icon. */
 .cmd-del-n { text-box: trim-both cap alphabetic; }
 /* Darken, not lighten: a lighter red drops the white label below 4.5:1 contrast. */
-.cmd-delete:hover:not(:disabled) { background: var(--cmd-danger); filter: brightness(0.92); }
+.cmd-delete:hover:not(:disabled) { background: var(--cmd-danger); filter: brightness(0.85); }
 
 .cmd-sr {
   position: absolute;
