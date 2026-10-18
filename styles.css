@@ -103,6 +103,8 @@ html.dark .cmd-bar {
 }
 .cmd-delete svg { flex: none; }
 .cmd-del-n:empty { display: none; }
+/* Trim the number's line box to the digit height so it centres on the icon whatever the font. */
+.cmd-del-n { text-box: trim-both cap alphabetic; }
 .cmd-delete:hover:not(:disabled) { background: var(--cmd-danger); filter: brightness(1.08); }
 
 .cmd-sr {
@@ -145,15 +147,13 @@ a.cmd-row .cmd-check.cmd-in-slot {
 a.cmd-row.cmd-selected { background: rgba(127, 127, 127, 0.18) !important; }
 a.cmd-row.cmd-selected .cmd-check { opacity: 1; background: currentColor; }
 a.cmd-row.cmd-selected .cmd-check::after {
+  /* The tick is an SVG mask filling the box, so it stays centred whatever box-sizing the site sets. */
   content: "";
   position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 4px;
-  height: 8px;
-  border: solid var(--cmd-tick, var(--main-surface-primary, #fff));
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+  inset: 0;
+  background: var(--cmd-tick, var(--main-surface-primary, #fff));
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.45l2.9 2.9 6.1-6.7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.45l2.9 2.9 6.1-6.7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
 }
 
 .cmd-gone { display: none !important; }
