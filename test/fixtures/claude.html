@@ -37,7 +37,9 @@
   document.cookie = `lastActiveOrg=${ORG1}; path=/`;
   // A delete from 10 minutes ago is too old for the bridge's catch-up refresh on load.
   localStorage.setItem('chatpurge:last-delete', String(Date.now() - 10 * 60e3));
-  localStorage.setItem('claude-conversation-ledger', JSON.stringify([A, B, C, D].map((u) => ({ u, at: 1, c: 0, p: 0 }))));
+  // claude.ai's own ledger of chats; ChatPurge must leave it exactly as it is.
+  const LEDGER = JSON.stringify([A, B, C, D].map((u) => ({ u, at: 1, c: 0, p: 0 })));
+  localStorage.setItem('claude-conversation-ledger', LEDGER);
 
   const calls = [];
   let cStatus = 404; // chat C: an unrelated 404, which must count as a failure
@@ -64,7 +66,7 @@
   try {
     const rows = () => [...document.querySelectorAll('[data-row-key] a[href^="/chat/"], [data-row-key] a[href^="/cowork/"]')];
     const panel = () => document.querySelector('.cmd-panel');
-    const ledger = () => JSON.parse(localStorage.getItem('claude-conversation-ledger'));
+    const ledgerUntouched = () => localStorage.getItem('claude-conversation-ledger') === LEDGER;
     const deletes = () => calls.filter((c) => c.method === 'DELETE');
 
     await sleep(600);
@@ -94,7 +96,7 @@
     check('DELETE uses the org from the cookie', deletes().length === 2 && deletes().every((c) => c.url.startsWith(`/api/organizations/${ORG1}/chat_conversations/`)), JSON.stringify(deletes()));
     check('an unrelated 404 is a failure and the chat stays selected', say() === "Deleted 1. 1 couldn't be deleted and are still selected." && rowOf(C).classList.contains('cmd-selected'), say());
     check('A collapsed, C still visible', gone(A) && !gone(C));
-    check('ledger flags the deleted chat only', ledger().find((e) => e.u === A).d === 1 && !ledger().find((e) => e.u === C).d);
+    check("claude.ai's ledger is left untouched", ledgerUntouched());
     await waitFor(() => invalidations.length > 0);
     const pred = invalidations[0]?.predicate;
     check('bridge invalidates the chat and Cowork lists only', !!pred && pred({ queryKey: ['chat_conversation_list', {}] })
@@ -116,7 +118,7 @@
     panel().querySelector('.cmd-delete').click();
     await waitFor(() => say().startsWith('Deleted') && deletes().length === 4);
     await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy'));
-    check('"conversation not found" counts as already gone', say() === 'Deleted 1 chat (1 already gone).' && gone(B) && ledger().find((e) => e.u === B).d === 1, say());
+    check('"conversation not found" counts as already gone', say() === 'Deleted 1 chat (1 already gone).' && gone(B), say());
 
     // Batch 4: Cowork sessions use their own API. A rejected one (403) must not stop the chat after it.
     press(rowOf(K_DENIED)); press(rowOf(K_OK)); press(rowOf(D));
@@ -132,7 +134,7 @@
     check('deleted Cowork row collapses, rejected one stays selected', gone(K_OK) && !gone(K_DENIED) && rowOf(K_DENIED).classList.contains('cmd-selected'));
     check('confirmation counts chats and Cowork sessions separately and labels sessions',
       confirms.at(-1) === "Delete 1 chat and 2 Cowork sessions?\n\n• Cowork denied (Cowork session)\n• Cowork OK (Cowork session)\n• Chat D\n\nThey can't be restored.", confirms.at(-1));
-    check('the ledger is not touched for Cowork sessions', ledger().every((e) => !e.u.startsWith('cse_')) && ledger().find((e) => e.u === D).d === 1);
+    check("claude.ai's ledger is still untouched after all batches", ledgerUntouched());
 
     key({ key: 'Escape' });
     await waitFor(() => !panel());

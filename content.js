@@ -9,7 +9,7 @@
 //   request(id, attempt)        the delete request (a fetch Response)
 //   isAlreadyGone(id, res)      true if a failed response means "already deleted"
 //   isFatal(id, status)         true if the batch should stop
-// Optional: checkboxHost(link), themeColors(ref), leaveDelayMs, beforeBatch(), afterDelete(id), afterBatch().
+// Optional: checkboxHost(link), themeColors(ref), leaveDelayMs, beforeBatch(), afterBatch().
 (() => {
   'use strict';
   const site = globalThis.ChatPurgeSite;
@@ -341,7 +341,6 @@
       try {
         if (await deleteOne(ids[i])) alreadyGone++;
         deleted++;
-        site.afterDelete?.(ids[i]);
         state.selected.delete(ids[i]);
         if (!markGone(ids[i])) gapsLeft = true;
       } catch (err) {

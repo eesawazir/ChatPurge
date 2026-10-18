@@ -4,7 +4,6 @@
   const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
   const ORG_ID = new RegExp(`^${UUID}$`, 'i');
   const ITEM_PATH = new RegExp(`/(?:chat/(${UUID})|cowork/(cse_[A-Za-z0-9]+))`, 'i');
-  const LEDGER_KEY = 'claude-conversation-ledger';
   const RECENT_DELETE_KEY = 'chatpurge:last-delete'; // read by claude-bridge.js on the next page load
   let cachedOrg = null;
 
@@ -48,18 +47,6 @@
       if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return { fg, bg };
     }
     return { fg, bg: null };
-  }
-
-  // The app flags chats it deletes itself with d: 1 in this ledger. Only touch it if it has the expected shape.
-  function flagLedgerDeleted(id) {
-    try {
-      const ledger = JSON.parse(localStorage.getItem(LEDGER_KEY) || 'null');
-      if (!Array.isArray(ledger) || !ledger.every((e) => e && typeof e.u === 'string')) return;
-      const entry = ledger.find((e) => e.u === id);
-      if (!entry || entry.d) return;
-      entry.d = 1;
-      localStorage.setItem(LEDGER_KEY, JSON.stringify(ledger));
-    } catch {}
   }
 
   function markRecentDelete() {
@@ -117,9 +104,6 @@
     isFatal: (id, status) => (status === 401 || status === 403) && !isCowork(id),
 
     beforeBatch: markRecentDelete,
-    afterDelete(id) {
-      if (!isCowork(id)) flagLedgerDeleted(id);
-    },
     async afterBatch() {
       markRecentDelete();
       await refreshLists();
