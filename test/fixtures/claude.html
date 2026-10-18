@@ -18,6 +18,10 @@
     <div data-row-key="a"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000a1" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat A</span></a></div></div></div>
     <div data-row-key="b"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000b2" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat B</span></a></div></div></div>
     <div data-row-key="c"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000c3" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat C</span></a></div></div></div>
+    <div data-row-key="d"><div><div data-row><a href="/chat/00000000-0000-4000-8000-0000000000d4" data-row-main-button><span class="df-leading-slot"><i></i></span><span data-row-label>Chat D</span></a></div></div></div>
+    <!-- Cowork sessions, with the "Mark as unread" status button claude.ai puts in their leading slot. -->
+    <div data-row-key="cowork:cse_01Ok"><div><div data-row><a href="/cowork/cse_01Ok" data-row-main-button><span class="df-leading-slot"><span role="button" aria-label="Mark as unread"><i></i></span></span><span data-row-label>Cowork OK</span></a></div></div></div>
+    <div data-row-key="cowork:cse_01Denied"><div><div data-row><a href="/cowork/cse_01Denied" data-row-main-button><span class="df-leading-slot"><span role="button" aria-label="Mark as unread"><i></i></span></span><span data-row-label>Cowork denied</span></a></div></div></div>
   </div>
   <div class="df-footer-row">
     <div class="min-w-0 flex-1"><button data-testid="user-menu-button">User</button></div>
@@ -29,14 +33,16 @@
   const ORG1 = '00000000-0000-4000-8000-0000000000f1';
   const ORG2 = '00000000-0000-4000-8000-0000000000f2';
   const A = '00000000-0000-4000-8000-0000000000a1', B = '00000000-0000-4000-8000-0000000000b2', C = '00000000-0000-4000-8000-0000000000c3';
+  const D = '00000000-0000-4000-8000-0000000000d4', K_OK = 'cse_01Ok', K_DENIED = 'cse_01Denied';
   document.cookie = `lastActiveOrg=${ORG1}; path=/`;
-  localStorage.setItem('claude-conversation-ledger', JSON.stringify([A, B, C].map((u) => ({ u, at: 1, c: 0, p: 0 }))));
+  localStorage.setItem('claude-conversation-ledger', JSON.stringify([A, B, C, D].map((u) => ({ u, at: 1, c: 0, p: 0 }))));
 
   const calls = [];
   let cStatus = 404; // chat C: an unrelated 404, which must count as a failure
   window.fetch = async (url, opts = {}) => {
-    calls.push({ url, method: opts.method });
+    calls.push({ url, method: opts.method, headers: opts.headers ?? {} });
     if (opts.method !== 'DELETE') return new Response('[]', { status: 200 });
+    if (url.endsWith(K_DENIED)) return new Response('{"error":{"type":"permission_error"}}', { status: 403 });
     if (url.endsWith(B)) return new Response(JSON.stringify({ type: 'error', error: { type: 'not_found_error', details: { error_code: 'chat_conversation_not_found' } } }), { status: 404 });
     if (url.endsWith(C)) return cStatus === 200 ? new Response('{}', { status: 200 }) : new Response('{"error":{"error_code":"other"}}', { status: 404 });
     return new Response('{}', { status: 200 });
@@ -53,7 +59,7 @@
 <script>
 (async () => {
   try {
-    const rows = () => [...document.querySelectorAll('[data-row-key] a[href^="/chat/"]')];
+    const rows = () => [...document.querySelectorAll('[data-row-key] a[href^="/chat/"], [data-row-key] a[href^="/cowork/"]')];
     const panel = () => document.querySelector('.cmd-panel');
     const ledger = () => JSON.parse(localStorage.getItem('claude-conversation-ledger'));
     const deletes = () => calls.filter((c) => c.method === 'DELETE');
@@ -68,9 +74,10 @@
     check('checkbox replaces the status dot in the leading slot', rows().every((a) => a.querySelector(':scope > .df-leading-slot > .cmd-check') && !a.classList.contains('cmd-pad')));
     check('count live region is rendered (not display:none)', panel().querySelector('.cmd-count').checkVisibility());
 
-    const gone = (u) => getComputedStyle(document.querySelector(`a[href="/chat/${u}"]`).closest('[data-row-key]')).display === 'none';
+    const link = (u) => document.querySelector(u.startsWith('cse_') ? `a[href="/cowork/${u}"]` : `a[href="/chat/${u}"]`);
+    const gone = (u) => getComputedStyle(link(u).closest('[data-row-key]')).display === 'none';
     const say = () => panel().querySelector('.cmd-announce').textContent;
-    const rowOf = (u) => document.querySelector(`a[href="/chat/${u}"]`);
+    const rowOf = link;
 
     // Batch 1: A deletes, C fails with an unrelated 404 and must stay selected.
     press(rowOf(A)); press(rowOf(C));
@@ -83,7 +90,8 @@
     check('ledger flags the deleted chat only', ledger().find((e) => e.u === A).d === 1 && !ledger().find((e) => e.u === C).d);
     await waitFor(() => invalidations.length > 0);
     const pred = invalidations[0]?.predicate;
-    check('bridge invalidates the chat list queries only', !!pred && pred({ queryKey: ['chat_conversation_list', {}] }) && !pred({ queryKey: ['other'] }));
+    check('bridge invalidates the chat and Cowork lists only', !!pred && pred({ queryKey: ['chat_conversation_list', {}] })
+      && pred({ queryKey: ['cowork-remote-sessions', 'org', true] }) && !pred({ queryKey: ['chat_conversation_tree', {}] }));
     await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy'));
     check('busy state ends after the batch', !document.querySelector('.cmd-bar.cmd-busy') && !panel().querySelector('.cmd-all').disabled);
 
@@ -102,6 +110,20 @@
     await waitFor(() => say().startsWith('Deleted') && deletes().length === 4);
     await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy'));
     check('"conversation not found" counts as already gone', say() === 'Deleted 1 chat (1 already gone).' && gone(B) && ledger().find((e) => e.u === B).d === 1, say());
+
+    // Batch 4: Cowork sessions use their own API. A rejected one (403) must not stop the chat after it.
+    press(rowOf(K_DENIED)); press(rowOf(K_OK)); press(rowOf(D));
+    await frames2();
+    panel().querySelector('.cmd-delete').click();
+    await waitFor(() => say().includes("couldn't be deleted") && deletes().length === 7);
+    await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy'));
+    const cowork = deletes().filter((c) => c.url.startsWith('/v1/code/sessions/'));
+    check('Cowork sessions are deleted through /v1/code/sessions with anthropic-version',
+      cowork.length === 2 && cowork.some((c) => c.url === `/v1/code/sessions/${K_OK}`) && cowork.every((c) => c.headers['anthropic-version'] === '2023-06-01'), JSON.stringify(cowork));
+    check('a rejected Cowork session does not stop the batch', deletes().at(-1)?.url === `/api/organizations/${ORG2}/chat_conversations/${D}`
+      && say() === "Deleted 2. 1 couldn't be deleted and are still selected.", say());
+    check('deleted Cowork row collapses, rejected one stays selected', gone(K_OK) && !gone(K_DENIED) && rowOf(K_DENIED).classList.contains('cmd-selected'));
+    check('the ledger is not touched for Cowork sessions', ledger().every((e) => !e.u.startsWith('cse_')) && ledger().find((e) => e.u === D).d === 1);
 
     key({ key: 'Escape' });
     await waitFor(() => !panel());

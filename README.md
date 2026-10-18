@@ -76,6 +76,7 @@ It calls the same endpoints the websites use when you delete a chat. Requests ar
 
 - **ChatGPT:** `PATCH /backend-api/conversation/{id}` with `{"is_visible": false}`, authorised with the token from `/api/auth/session`.
 - **Claude:** `DELETE /api/organizations/{org}/chat_conversations/{id}`, authorised by your signed-in session cookie.
+  Cowork sessions in the same list go to `DELETE /v1/code/sessions/{id}`.
 
 Deletions are spaced 350 ms apart and retried with backoff if the site pushes back.
 

@@ -4,7 +4,7 @@
 // claude.ai keeps its sidebar chat list in a React Query cache and does not refetch it after
 // a delete made behind its back, so deleted chats come back after a refresh. When a batch
 // finishes, content.js dispatches "cmd:refresh-lists" and this script asks the app to refetch
-// its chat lists. It answers with "cmd:lists-refreshed" so content.js knows when it is done.
+// its chat and Cowork session lists. It answers with "cmd:lists-refreshed" so content.js knows when it is done.
 //
 // If the cache client can't be found or changes shape, this does nothing: deleting still works.
 (() => {
@@ -13,6 +13,8 @@
   window.__cmdBridgeLoaded = true;
 
   let client = null;
+  // The sidebar's chat list and its Cowork session list.
+  const LISTS = ['chat_conversation_list', 'cowork-remote-sessions'];
 
   // The QueryClient is passed to React as a prop of its provider, so walk React's fiber tree.
   function findClient() {
@@ -39,7 +41,7 @@
     try {
       client ??= findClient();
       if (!client) return reply();
-      Promise.resolve(client.invalidateQueries({ predicate: (q) => q.queryKey?.[0] === 'chat_conversation_list' }))
+      Promise.resolve(client.invalidateQueries({ predicate: (q) => LISTS.includes(q.queryKey?.[0]) }))
         .catch(() => {})
         .finally(reply);
     } catch {

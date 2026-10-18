@@ -7,8 +7,15 @@
   const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
   const isClaude = location.hostname === 'claude.ai';
   // Per-site bits: how to spot chat rows and chat IDs, and where "no chat open" lives.
+  // claude.ai's sidebar also lists Cowork sessions (/cowork/cse_…), which have their own ID format and API.
+  const COWORK = 'cse_[A-Za-z0-9]+';
   const SITE = isClaude
-    ? { idRe: new RegExp(`/chat/(${UUID})`, 'i'), rowSelector: '[data-row-key] a[href^="/chat/"]', linkSelector: 'a[href^="/chat/"]', home: '/new' }
+    ? {
+      idRe: new RegExp(`/(?:chat/(${UUID})|cowork/(${COWORK}))`, 'i'),
+      rowSelector: '[data-row-key] a[href^="/chat/"], [data-row-key] a[href^="/cowork/"]',
+      linkSelector: 'a[href^="/chat/"], a[href^="/cowork/"]',
+      home: '/new',
+    }
     : { idRe: new RegExp(`/c/(${UUID})`, 'i'), rowSelector: 'nav a[href*="/c/"], aside a[href*="/c/"]', linkSelector: 'a[href*="/c/"]', home: '/' };
   const DELAY_MS = 350;          // pause between deletions to stay under rate limits
   const TOKEN_TTL_MS = 5 * 60e3; // re-fetch the session token after 5 minutes
@@ -21,7 +28,9 @@
   let statusTimer = null;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const idOf = (a) => (a.getAttribute('href') || '').match(SITE.idRe)?.[1] ?? null;
+  const idIn = (path) => { const m = path.match(SITE.idRe); return m ? m[1] ?? m[2] ?? null : null; };
+  const idOf = (a) => idIn(a.getAttribute('href') || '');
+  const isCowork = (id) => id.startsWith('cse_');
   const rows = () =>
     [...document.querySelectorAll(SITE.rowSelector)].filter((a) => idOf(a) && !a.closest('.cmd-gone'));
 
@@ -446,6 +455,14 @@
   }
 
   async function sendDelete(id, attempt) {
+    if (isClaude && isCowork(id)) {
+      // Same request claude.ai sends; without anthropic-version the server answers 400.
+      return fetch(`/v1/code/sessions/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'anthropic-version': '2023-06-01' },
+      });
+    }
     if (isClaude) {
       const org = await getOrgId();
       return fetch(`/api/organizations/${org}/chat_conversations/${id}`, {
@@ -471,7 +488,7 @@
     // claude.ai: a specific "no such conversation" error means it is already deleted
     // (e.g. a stale sidebar row). Any other 404 stays a failure, so a changed endpoint
     // can't make every chat look deleted.
-    if (isClaude && res.status === 404) {
+    if (isClaude && !isCowork(id) && res.status === 404) {
       const body = await res.clone().json().catch(() => null);
       const code = body?.error?.details?.error_code ?? body?.error?.error_code;
       if (code === 'chat_conversation_not_found') return true;
@@ -481,7 +498,9 @@
       return hideConversation(id, attempt + 1);
     }
     if (res.status === 401 && attempt === 0) return hideConversation(id, 1); // refresh token once
-    throw Object.assign(new Error(`HTTP ${res.status}`), { fatal: res.status === 401 || res.status === 403 });
+    // A rejected Cowork session uses a different API, so it doesn't stop the chats in the batch.
+    const fatal = (res.status === 401 || res.status === 403) && !isCowork(id);
+    throw Object.assign(new Error(`HTTP ${res.status}`), { fatal });
   }
 
   async function deleteSelected() {
@@ -492,7 +511,7 @@
 
     state.busy = true;
     render();
-    const openId = location.pathname.match(SITE.idRe)?.[1];
+    const openId = idIn(location.pathname);
     let deleted = 0;
     let stoppedEarly = null;
     let gapsLeft = false;
@@ -503,7 +522,7 @@
       try {
         if (await hideConversation(ids[i])) alreadyGone++;
         deleted++;
-        if (isClaude) flagLedgerDeleted(ids[i]);
+        if (isClaude && !isCowork(ids[i])) flagLedgerDeleted(ids[i]);
         state.selected.delete(ids[i]);
         if (!markGone(ids[i])) gapsLeft = true;
       } catch (err) {
