@@ -415,6 +415,19 @@
     } catch { /* unknown format or storage unavailable: leave the app's data alone */ }
   }
 
+  // claude.ai refetches its sidebar list only when the cached copy goes stale, so after an
+  // out-of-band delete it can list deleted chats again after a refresh. claude-bridge.js (page
+  // context) asks the app to refetch; wait for its reply, but not forever if it isn't there.
+  function refreshSiteLists() {
+    if (!isClaude) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => { clearTimeout(timer); document.removeEventListener('cmd:lists-refreshed', done); resolve(); };
+      const timer = setTimeout(done, 3000);
+      document.addEventListener('cmd:lists-refreshed', done);
+      document.dispatchEvent(new CustomEvent('cmd:refresh-lists'));
+    });
+  }
+
   async function sendDelete(id, attempt) {
     if (isClaude) {
       const org = await getOrgId();
@@ -497,7 +510,11 @@
     }
     render();
 
-    if (openId && ids.includes(openId) && !state.selected.has(openId)) location.assign(SITE.home);
+    if (deleted) await refreshSiteLists();
+    if (openId && ids.includes(openId) && !state.selected.has(openId)) {
+      if (isClaude) await sleep(1200); // let the app persist its refreshed list before we leave the page
+      location.assign(SITE.home);
+    }
   }
 
   // ---- Toolbar icon messages ----------------------------------------------

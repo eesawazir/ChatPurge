@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatPurge",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Adds checkboxes to the ChatGPT and Claude sidebars so you can bulk-delete chats.",
   "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
   "action": {
@@ -14,6 +14,12 @@
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*", "https://claude.ai/*"],
       "js": ["content.js"],
       "css": ["styles.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["claude-bridge.js"],
+      "world": "MAIN",
       "run_at": "document_idle"
     }
   ]
