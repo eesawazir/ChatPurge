@@ -7,14 +7,13 @@
 //   findToolbarSlot()           { slot, row } beside the user's name, or null
 //   mountToolbar(slot, panel)
 //   request(id)                 the delete request (a fetch Response)
-//   isAlreadyGone(id, res)      true if a failed response means "already deleted"
 //   isFatal(id, status)         true if the batch should stop
-// Optional: checkboxHost(link), themeColors(ref), beforeBatch(), afterBatch().
+// Optional: isAlreadyGone(id, res) (a failed response that means "already deleted"),
+//           checkboxHost(link), themeColors(ref), beforeBatch(), afterBatch().
 (() => {
   'use strict';
   const site = globalThis.ChatPurgeSite;
-  if (!site || window.__cmdLoaded) return;
-  window.__cmdLoaded = true;
+  if (!site) return;
 
   const DELAY_MS = 350; // between deletions, to stay under rate limits
   const CONFIRM_LIST = 8;
@@ -69,7 +68,12 @@
   // Buttons go beside the user's name and status messages in a strip just above that row.
   // Without a slot, both share a small card at the sidebar's bottom-right. Nothing stays in the page while idle.
   function placeToolbar() {
-    if (!state.active) { panel.remove(); ui.remove(); return; }
+    if (!state.active) {
+      panel.remove();
+      ui.remove();
+      document.documentElement.style.removeProperty('--cmd-tick');
+      return;
+    }
     if (!ui.isConnected) document.body.append(ui);
     const r = profileSlot?.isConnected && profileRow?.isConnected ? profileRow.getBoundingClientRect() : null;
     if (r && r.width > 120 && r.height > 0) {
@@ -298,7 +302,7 @@
   async function deleteOne(id, attempt = 0) {
     const res = await site.request(id);
     if (res.ok) return false;
-    if (await site.isAlreadyGone(id, res)) return true;
+    if (await site.isAlreadyGone?.(id, res)) return true;
     if ((res.status === 429 || res.status >= 500) && attempt < 3) {
       await sleep(1500 * 2 ** attempt);
       return deleteOne(id, attempt + 1);

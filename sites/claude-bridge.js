@@ -6,8 +6,6 @@
 // If the client can't be found, it does nothing.
 (() => {
   'use strict';
-  if (window.__cmdBridgeLoaded) return;
-  window.__cmdBridgeLoaded = true;
 
   const LISTS = ['chat_conversation_list', 'cowork-remote-sessions'];
   const RECENT_DELETE_KEY = 'chatpurge:last-delete';

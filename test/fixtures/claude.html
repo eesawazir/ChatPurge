@@ -145,11 +145,21 @@
     await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy'));
     check('a 401 on claude.ai is not retried and stops the batch', deletes().filter((c) => c.url.endsWith(E)).length === 1
       && say().startsWith('Deleted 0. Stopped: HTTP 401.'), say());
+    // Batch 6: without the organization cookie the chat request can't be built; the batch stops, nothing is guessed.
+    document.cookie = 'lastActiveOrg=; path=/; max-age=0';
+    const before = calls.length;
+    panel().querySelector('.cmd-delete').click();
+    await waitFor(() => say().includes('organization'));
+    await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy'));
+    check('no organization cookie stops the batch without guessing one', say().startsWith('Deleted 0. Stopped: Could not find your organization.')
+      && !calls.slice(before).some((c) => c.url.includes('/api/organizations')), say());
     check("claude.ai's ledger is still untouched after all batches", ledgerUntouched());
 
+    check('the tick colour is set while selecting', document.documentElement.style.getPropertyValue('--cmd-tick') !== '');
     key({ key: 'Escape' });
     await waitFor(() => !panel());
     check('Esc leaves selection mode', !panel() && !document.querySelector('.cmd-check, .cmd-slot-host'));
+    check('nothing is left on the page element after Esc', document.documentElement.style.getPropertyValue('--cmd-tick') === '');
   } catch (e) { finish(e); return; }
   finish();
 })();

@@ -62,7 +62,6 @@
         body: JSON.stringify({ is_visible: false }),
       });
     },
-    isAlreadyGone: async () => false,
     isFatal: (id, status) => status === 401 || status === 403,
   };
 })();
