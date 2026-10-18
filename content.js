@@ -29,7 +29,9 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const idIn = (path) => { const m = path.match(SITE.idRe); return m ? m[1] ?? m[2] ?? null : null; };
-  const idOf = (a) => idIn(a.getAttribute('href') || '');
+  // Only links to this site count, and only their path: a link elsewhere (or a query string)
+  // that happens to contain /c/<uuid> must not become a selectable chat.
+  const idOf = (a) => (a.origin === location.origin ? idIn(a.pathname) : null);
   const isCowork = (id) => id.startsWith('cse_');
   const rows = () =>
     [...document.querySelectorAll(SITE.rowSelector)].filter((a) => idOf(a) && !a.closest('.cmd-gone'));
@@ -106,7 +108,8 @@
   // row (only while there is one). If the slot can't be found, everything floats
   // in a small card at the sidebar's bottom-right instead.
   function placeToolbar() {
-    if (!state.active) { panel.remove(); return; }
+    if (!state.active) { panel.remove(); ui.remove(); return; } // leave nothing in the page while idle
+    if (!ui.isConnected) document.body.append(ui);
     const r = profileSlot?.isConnected && profileRow?.isConnected ? profileRow.getBoundingClientRect() : null;
     if (r && r.width > 120 && r.height > 0) {
       if (panel.parentElement !== profileSlot) {
@@ -503,11 +506,29 @@
     throw Object.assign(new Error(`HTTP ${res.status}`), { fatal });
   }
 
+  // Select all and Shift+click can include rows that are scrolled out of view, so the
+  // confirmation names what will be deleted (the dialog is plain text).
+  const CONFIRM_LIST = 8;
+  function confirmText(ids) {
+    const titles = new Map(rows().map((a) => [idOf(a), a.querySelector('[data-row-label]') ?? a]));
+    const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    const sessions = ids.filter(isCowork).length;
+    const chats = ids.length - sessions;
+    const what = [chats && count(chats, 'chat', 'chats'), sessions && count(sessions, 'Cowork session', 'Cowork sessions')]
+      .filter(Boolean).join(' and ');
+    const lines = ids.slice(0, CONFIRM_LIST).map((id) => {
+      let title = (titles.get(id)?.textContent ?? '').replace(/\s+/g, ' ').trim() || '(no title)';
+      if (title.length > 60) title = `${title.slice(0, 59)}…`;
+      return `• ${title}${isCowork(id) ? ' (Cowork session)' : ''}`;
+    });
+    if (ids.length > CONFIRM_LIST) lines.push(`…and ${ids.length - CONFIRM_LIST} more`);
+    return `Delete ${what}?\n\n${lines.join('\n')}\n\nThey can't be restored.`;
+  }
+
   async function deleteSelected() {
     const ids = [...state.selected];
     if (!ids.length || state.busy) return;
-    const plural = ids.length === 1 ? 'chat' : 'chats';
-    if (!confirm(`Delete ${ids.length} ${plural}?\n\nDeleted chats can't be restored.`)) return;
+    if (!confirm(confirmText(ids))) return;
 
     state.busy = true;
     render();
@@ -560,6 +581,5 @@
     if (msg?.type === 'cmd-toggle') setActive(!state.active);
   });
 
-  document.body.append(ui);
   render();
 })();

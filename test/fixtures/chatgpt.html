@@ -22,6 +22,12 @@
       <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000003">Chat 3</a><button>...</button></div></li>
       <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000004">Chat 4</a><button>...</button></div></li>
       <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000005" role="menuitem">Chat 5</a><button>...</button></div></li>
+      <li><div class="row"><a href="/g/g-p-demo/c/00000000-0000-4000-8000-000000000006">Project chat</a><button>...</button></div></li>
+      <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000007">A very long chat title that keeps going well past sixty characters so it gets cut</a><button>...</button></div></li>
+      <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000008">Chat 8</a><button>...</button></div></li>
+      <li><div class="row"><a href="/c/00000000-0000-4000-8000-000000000009">Chat 9</a><button>...</button></div></li>
+      <li><div class="row"><a href="/c/00000000-0000-4000-8000-00000000000a">Chat 10</a><button>...</button></div></li>
+      <li><div class="row"><a href="/c/00000000-0000-4000-8000-00000000000b">Chat 11</a><button>...</button></div></li>
     </ol>
   </div>
   <div class="profile">
@@ -29,6 +35,11 @@
     <div class="flex items-center empty:hidden gap-1 empty\:hidden"></div>
   </div>
 </nav>
+<!-- Links that contain /c/<uuid> but are not chats on this site: they must never become selectable. -->
+<aside>
+  <a id="offsite" href="https://example.com/c/00000000-0000-4000-8000-00000000000c">Off-site link</a>
+  <a id="inquery" href="/out?next=/c/00000000-0000-4000-8000-00000000000d">Redirect link</a>
+</aside>
 <script src="harness.js"></script>
 <script>
   const calls = [];
@@ -47,6 +58,7 @@
     const panel = () => document.querySelector('.cmd-panel');
 
     await frames2();
+    check('idle: no status bar in the page', !document.querySelector('.cmd-bar'));
     check('idle: no toolbar, checkboxes or roles', !panel() && !document.querySelector('.cmd-check, [data-cmd-role]'));
 
     key({ altKey: true, shiftKey: true, code: 'KeyD', repeat: true });
@@ -59,6 +71,9 @@
     check('toolbar docks in the profile row slot despite a hidden decoy', panel()?.parentElement === slot);
     check('rows get checkboxes and the checkbox role', rows().every((a) => a.querySelector('.cmd-check') && a.getAttribute('role') === 'checkbox'));
     check('count live region is rendered (not display:none)', panel().querySelector('.cmd-count').checkVisibility());
+    check('a project chat (/g/…/c/<uuid>) gets a checkbox', !!document.querySelector('a[href^="/g/"] .cmd-check'));
+    check('links to other sites or with /c/ only in the query get no checkbox',
+      !document.querySelector('#offsite .cmd-check, #inquery .cmd-check, #offsite.cmd-row, #inquery.cmd-row'));
     check('toolbar uses role=group', panel().getAttribute('role') === 'group');
 
     press(rows()[0]);
@@ -89,6 +104,7 @@
     check('buttons are disabled while deleting', panel().querySelector('.cmd-delete').disabled && panel().querySelector('.cmd-done').disabled);
     await waitFor(() => panel().querySelector('.cmd-announce').textContent.startsWith('Deleted'));
     const patches = calls.filter((c) => c.method === 'PATCH');
+    check('confirmation names the chats', confirms.at(-1) === "Delete 2 chats?\n\n• Chat 1\n• Chat 2\n\nThey can't be restored.", confirms.at(-1));
     check('sends one PATCH per chat with the token', patches.length === 2
       && patches.every((c) => c.body === '{"is_visible":false}' && c.auth === 'Bearer tok'), JSON.stringify(patches));
     check('PATCH targets the chat ids', patches[0]?.url === `/backend-api/conversation/${id(1)}` && patches[1]?.url === `/backend-api/conversation/${id(2)}`);
@@ -99,15 +115,27 @@
     await waitFor(() => !panel().querySelector('.cmd-delete').hasAttribute('data-x') && !document.querySelector('.cmd-bar.cmd-busy'));
     check('busy state ends after the batch', !document.querySelector('.cmd-bar.cmd-busy') && !panel().querySelector('.cmd-all').disabled);
 
+    // Select all, then delete: the confirmation lists 8 titles (long ones shortened) and counts the rest.
+    panel().querySelector('.cmd-all').click();
+    await frames2();
+    panel().querySelector('.cmd-delete').click();
+    await waitFor(() => !document.querySelector('.cmd-bar.cmd-busy') && calls.filter((c) => c.method === 'PATCH').length === 11);
+    const text = confirms.at(-1);
+    const bullets = text.split('\n').filter((l) => l.startsWith('• '));
+    check('long selections list 8 titles and count the rest', text.startsWith('Delete 9 chats?\n\n') && bullets.length === 8 && text.includes('\n…and 1 more\n'), text);
+    check('long titles are shortened', bullets.some((l) => l.endsWith('…') && l.length === 62) && !text.includes('gets cut'), text);
+    check('off-site and query links are never deleted', !calls.some((c) => /0000000000[cd]$/.test(c.url)));
+
     key({ key: 'Escape' });
     await frames2();
     check('Esc leaves selection mode and removes the toolbar', !panel() && !document.querySelector('.cmd-check'));
+    check('Esc removes the status bar from the page', !document.querySelector('.cmd-bar'));
     check('roles are restored (site role kept, none added)', document.querySelector(`a[href="/c/${id(5)}"]`).getAttribute('role') === 'menuitem'
       && !document.querySelector('[data-cmd-role], a[role="checkbox"]'));
 
     document.querySelector('ol').append(document.createElement('li'));
     await frames2();
-    check('idle mutations do not bring the toolbar back', !panel());
+    check('idle mutations do not bring the toolbar or status bar back', !panel() && !document.querySelector('.cmd-bar'));
   } catch (e) { finish(e); return; }
   finish();
 })();

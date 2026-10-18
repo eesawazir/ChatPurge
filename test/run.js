@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Browser tests for the content script. No dependencies: Node 18+ and a Chrome/Chromium binary.
 //
-//   node test/run.js            (set CHROME=/path/to/chrome if it is not on PATH)
+//   node test/run.js            (set CHROME=/path/to/chrome if it is not on PATH;
+//                                CHROME_NO_SANDBOX=1 if Chrome refuses to start, e.g. as root)
 //
 // Each fixture in test/fixtures is a static page with the sidebar markup of one site. It loads the
 // real content.js and styles.css, stubs fetch/confirm, drives the UI and reports PASS/FAIL lines to
@@ -54,7 +55,9 @@ async function runFixture(chrome, port, { file, host }) {
   report = '';
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'chatpurge-test-'));
   const child = spawn(chrome, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', `--user-data-dir=${profile}`, '--no-first-run',
+    '--headless=new', '--disable-gpu', `--user-data-dir=${profile}`, '--no-first-run',
+    // Chrome's sandbox stays on; only containers or root sessions need CHROME_NO_SANDBOX=1.
+    ...(process.env.CHROME_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
     `--host-resolver-rules=MAP ${host} 127.0.0.1`, `http://${host}:${port}/fixtures/${file}`,
   ], { stdio: 'ignore' });
   const exited = new Promise((r) => child.once('exit', r));

@@ -65,7 +65,7 @@
     const deletes = () => calls.filter((c) => c.method === 'DELETE');
 
     await frames2();
-    check('idle: nothing injected', !panel() && !document.querySelector('.cmd-check'));
+    check('idle: nothing injected', !panel() && !document.querySelector('.cmd-check, .cmd-bar'));
 
     key({ altKey: true, shiftKey: true, code: 'KeyD' });
     await frames2();
@@ -123,6 +123,8 @@
     check('a rejected Cowork session does not stop the batch', deletes().at(-1)?.url === `/api/organizations/${ORG2}/chat_conversations/${D}`
       && say() === "Deleted 2. 1 couldn't be deleted and are still selected.", say());
     check('deleted Cowork row collapses, rejected one stays selected', gone(K_OK) && !gone(K_DENIED) && rowOf(K_DENIED).classList.contains('cmd-selected'));
+    check('confirmation counts chats and Cowork sessions separately and labels sessions',
+      confirms.at(-1) === "Delete 1 chat and 2 Cowork sessions?\n\n• Cowork denied (Cowork session)\n• Cowork OK (Cowork session)\n• Chat D\n\nThey can't be restored.", confirms.at(-1));
     check('the ledger is not touched for Cowork sessions', ledger().every((e) => !e.u.startsWith('cse_')) && ledger().find((e) => e.u === D).d === 1);
 
     key({ key: 'Escape' });

@@ -3,7 +3,8 @@
   const lines = [];
   const clean = (s) => String(s).replace(/[<>&]/g, '?');
   window.chrome = { runtime: { onMessage: { addListener() {} } } }; // content.js talks to the extension
-  window.confirm = () => true;
+  window.confirms = []; // texts of the confirmation dialogs, always answered yes
+  window.confirm = (msg) => { window.confirms.push(String(msg)); return true; };
   // The full result is sent to the runner after every check, so a test that hangs still shows how far it got.
   const publish = (end) => navigator.sendBeacon('/__result', lines.join('\n') + (end ? '\nEND' : ''));
   window.check = (name, ok, detail = '') => {
