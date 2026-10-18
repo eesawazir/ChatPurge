@@ -1,4 +1,4 @@
-/* ---------- Shared tokens (follow ChatGPT's theme variables) ---------- */
+/* Colours follow ChatGPT's theme variables; on claude.ai content.js sets --cmd-fg / --cmd-bg. */
 .cmd-panel,
 .cmd-bar {
   --cmd-bg: var(--sidebar-surface-primary, var(--main-surface-primary, #f9f9f9));
@@ -18,9 +18,8 @@ html.dark .cmd-bar {
   --cmd-line: var(--border-medium, rgba(255, 255, 255, 0.15));
 }
 
-/* ---------- Status strip / floating fallback ---------- */
-/* Docked: only a status strip just above the profile row, shown while there is a message.
-   Floating (slot not found): the buttons and status share a small card bottom-right. */
+/* Docked: a status strip above the profile row, shown only with a message.
+   Floating (no slot found): buttons and status share a small card. */
 .cmd-bar {
   position: fixed;
   z-index: 2147483000;
@@ -47,12 +46,10 @@ html.dark .cmd-bar {
 }
 .cmd-bar.cmd-busy { cursor: progress; }
 
-/* Buttons: compact icons, mounted in the profile row's trailing slot. */
 .cmd-panel {
   display: flex;
   align-items: center;
   gap: 2px;
-  font: 500 13px/1.3 ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
 }
 
 .cmd-status {
@@ -92,19 +89,14 @@ html.dark .cmd-bar {
 .cmd-all.cmd-all-on .cmd-i-clear { display: inline; }
 
 .cmd-delete {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 6px; /* same 28px box as the select / done buttons when there is no count */
   background: var(--cmd-danger);
   color: #fff;
   font-variant-numeric: tabular-nums;
 }
-.cmd-delete svg { flex: none; }
 .cmd-del-n:empty { display: none; }
-/* Trim the number's line box to the digit height so it centres on the icon whatever the font. */
+/* Trims the digits' line box so the count centres on the icon. */
 .cmd-del-n { text-box: trim-both cap alphabetic; }
-/* Darken on hover: lightening the red would push the white label below 4.5:1 contrast. */
+/* Darken, not lighten: a lighter red drops the white label below 4.5:1 contrast. */
 .cmd-delete:hover:not(:disabled) { background: var(--cmd-danger); filter: brightness(0.92); }
 
 .cmd-sr {
@@ -116,7 +108,7 @@ html.dark .cmd-bar {
   white-space: nowrap;
 }
 
-/* ---------- Sidebar rows in selection mode ---------- */
+/* Sidebar rows while selecting */
 a.cmd-row { cursor: default !important; }
 a.cmd-pad {
   position: relative !important;
@@ -135,7 +127,7 @@ a.cmd-row .cmd-check {
   opacity: 0.55;
   pointer-events: none;
 }
-/* claude.ai: the checkbox replaces the status dot in the row's leading slot */
+/* claude.ai: the checkbox takes the place of the row's status dot */
 .cmd-slot-host { position: relative; }
 .cmd-slot-host > :not(.cmd-check) { visibility: hidden; }
 a.cmd-row .cmd-check.cmd-in-slot {
@@ -147,7 +139,7 @@ a.cmd-row .cmd-check.cmd-in-slot {
 a.cmd-row.cmd-selected { background: rgba(127, 127, 127, 0.18) !important; }
 a.cmd-row.cmd-selected .cmd-check { opacity: 1; background: currentColor; }
 a.cmd-row.cmd-selected .cmd-check::after {
-  /* The tick is an SVG mask filling the box, so it stays centred whatever box-sizing the site sets. */
+  /* An SVG mask stays centred whatever box-sizing the site sets. */
   content: "";
   position: absolute;
   inset: 0;

@@ -4,10 +4,9 @@
 //   node test/run.js            (set CHROME=/path/to/chrome if it is not on PATH;
 //                                CHROME_NO_SANDBOX=1 if Chrome refuses to start, e.g. as root)
 //
-// Each fixture in test/fixtures is a static page with the sidebar markup of one site. It loads the
-// real content.js and styles.css, stubs fetch/confirm, drives the UI and reports PASS/FAIL lines to
-// this script (a POST to /__result after every check). Chrome runs headless against a local server.
-// claude.ai is mapped to 127.0.0.1 because content.js picks its site config from the hostname.
+// Each fixture in test/fixtures is a static page with one site's sidebar markup. It loads the real
+// site file, content.js and styles.css, stubs fetch/confirm, drives the UI and reports PASS/FAIL lines
+// to this script (a POST to /__result after every check). Chrome runs headless against a local server.
 'use strict';
 const http = require('http');
 const fs = require('fs');
@@ -16,16 +15,10 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
-const SOURCES = new Set(['content.js', 'styles.css', 'claude-bridge.js']);
+const SOURCES = new Set(['content.js', 'styles.css', 'sites/chatgpt.js', 'sites/claude.js', 'sites/claude-bridge.js']);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 const TIMEOUT_MS = 60000;
-const FIXTURES = [
-  // content.js treats every host except claude.ai as ChatGPT, and chatgpt.com itself is HSTS-preloaded
-  // (Chrome would force https), so the ChatGPT fixture is served from localhost.
-  { file: 'chatgpt.html', host: 'localhost' },
-  { file: 'claude.html', host: 'claude.ai' },
-  { file: 'claude-reload.html', host: 'claude.ai' },
-];
+const FIXTURES = ['chatgpt.html', 'claude.html', 'claude-reload.html'];
 
 function findChrome() {
   const candidates = [process.env.CHROME, 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].filter(Boolean);
@@ -45,21 +38,22 @@ const server = http.createServer((req, res) => {
     req.on('end', () => { report = body; res.writeHead(204).end(); onReport(); });
     return;
   }
-  const name = path.basename(new URL(req.url, 'http://x').pathname);
-  const file = req.url.startsWith('/src/') && SOURCES.has(name) ? path.join(ROOT, name)
-    : req.url.startsWith('/fixtures/') ? path.join(__dirname, 'fixtures', name) : null;
+  const url = new URL(req.url, 'http://x').pathname;
+  const src = url.startsWith('/src/') ? url.slice('/src/'.length) : null;
+  const file = src && SOURCES.has(src) ? path.join(ROOT, src)
+    : url.startsWith('/fixtures/') ? path.join(__dirname, 'fixtures', path.basename(url)) : null;
   if (!file || !fs.existsSync(file)) { res.writeHead(404).end(); return; }
   res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'text/plain' }).end(fs.readFileSync(file));
 });
 
-async function runFixture(chrome, port, { file, host }) {
+async function runFixture(chrome, port, file) {
   report = '';
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'chatpurge-test-'));
   const child = spawn(chrome, [
     '--headless=new', '--disable-gpu', `--user-data-dir=${profile}`, '--no-first-run',
     // Chrome's sandbox stays on; only containers or root sessions need CHROME_NO_SANDBOX=1.
     ...(process.env.CHROME_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
-    `--host-resolver-rules=MAP ${host} 127.0.0.1`, `http://${host}:${port}/fixtures/${file}`,
+    `http://127.0.0.1:${port}/fixtures/${file}`,
   ], { stdio: 'ignore' });
   const exited = new Promise((r) => child.once('exit', r));
   await new Promise((resolve) => {

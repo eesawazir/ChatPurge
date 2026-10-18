@@ -1,23 +1,21 @@
-// Runs in the page's own JavaScript context on claude.ai (manifest "world": "MAIN"),
-// because the extension's normal content script cannot see page objects.
-//
-// claude.ai keeps its sidebar chat list in a React Query cache and does not refetch it after
-// a delete made behind its back, so deleted chats come back after a refresh. When a batch
-// finishes, content.js dispatches "cmd:refresh-lists" and this script asks the app to refetch
-// its chat and Cowork session lists. It answers with "cmd:lists-refreshed" so content.js knows when it is done.
-//
-// It also catches up after a reload that came too soon after a delete (see catchUpAfterReload).
-// If the cache client can't be found or changes shape, this does nothing: deleting still works.
+// claude.ai, in the page's own context ("world": "MAIN"), because content scripts can't reach the
+// app's objects. It finds the app's React Query client and makes it refetch the sidebar lists:
+//  - when content.js asks after a batch ("cmd:refresh-lists", answered with "cmd:lists-refreshed");
+//  - on a page load soon after a delete, because the app would otherwise restore its saved list
+//    from before the delete and treat it as current for about a minute.
+// If the client can't be found, it does nothing.
 (() => {
   'use strict';
   if (window.__cmdBridgeLoaded) return;
   window.__cmdBridgeLoaded = true;
 
-  let client = null;
-  // The sidebar's chat list and its Cowork session list.
   const LISTS = ['chat_conversation_list', 'cowork-remote-sessions'];
+  const RECENT_DELETE_KEY = 'chatpurge:last-delete';
+  const CATCH_UP_MS = 5 * 60e3;
+  const CATCH_UP_WAIT_MS = 15e3;
+  let client = null;
 
-  // The QueryClient is passed to React as a prop of its provider, so walk React's fiber tree.
+  // The client is a prop of its React provider, so walk the fiber tree from the root.
   function findClient() {
     const roots = [document.getElementById('root'), document.getElementById('__next'), document.body, ...document.body.children];
     for (const el of roots) {
@@ -36,9 +34,9 @@
     return null;
   }
 
-  const reply = () => document.dispatchEvent(new CustomEvent('cmd:lists-refreshed'));
   const refresh = () => Promise.resolve(client.invalidateQueries({ predicate: (q) => LISTS.includes(q.queryKey?.[0]) }))
     .catch(() => {});
+  const reply = () => document.dispatchEvent(new CustomEvent('cmd:lists-refreshed'));
 
   document.addEventListener('cmd:refresh-lists', () => {
     try {
@@ -51,12 +49,6 @@
     }
   });
 
-  // A reload soon after a delete (or during a batch) can restore the app's saved list from before the
-  // delete, which it then treats as current for about a minute. content.js records when it last deleted
-  // something; if that was recent, wait until the app has restored its list and ask it to refetch.
-  const RECENT_DELETE_KEY = 'chatpurge:last-delete';
-  const CATCH_UP_MS = 5 * 60e3;
-  const CATCH_UP_WAIT_MS = 15e3;
   function catchUpAfterReload() {
     let last = 0;
     try { last = Number(localStorage.getItem(RECENT_DELETE_KEY)) || 0; } catch { return; }
