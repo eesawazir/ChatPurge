@@ -88,3 +88,7 @@ No build step, no dependencies, no extra permissions.
   markup at any time, which would break the extension.
 - **Deleted chats cannot be restored.** Try it on a throwaway chat first.
 - After a large batch, reload the page so the site's own sidebar cache catches up.
+
+---
+
+**Upcoming:** DeepSeek support.
